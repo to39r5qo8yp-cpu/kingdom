@@ -1,0 +1,167 @@
+{
+  "version": 1,
+  "jobs": [
+    {
+      "id": "4269be19-f8a3-4495-9fbf-916e46adde5c",
+      "name": "Daily Auto-Update",
+      "enabled": true,
+      "createdAtMs": 1773535936089,
+      "updatedAtMs": 1773745301306,
+      "schedule": {
+        "kind": "cron",
+        "expr": "0 4 * * *",
+        "tz": "America/Los_Angeles"
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "Run daily auto-updates: Update OpenClaw to latest version, run doctor --fix to apply migrations, then update all installed skills via clawhub update --all. Report what was updated with version changes."
+      },
+      "delivery": {
+        "mode": "announce",
+        "channel": "discord",
+        "to": "channel:1473525050903756933"
+      },
+      "state": {
+        "nextRunAtMs": 1773831600000,
+        "lastRunAtMs": 1773745200007,
+        "lastRunStatus": "ok",
+        "lastStatus": "ok",
+        "lastDurationMs": 101299,
+        "lastDelivered": true,
+        "lastDeliveryStatus": "delivered",
+        "consecutiveErrors": 0
+      }
+    },
+    {
+      "id": "8e4fcf1e-cefe-4d72-b368-26f4abfbb0c2",
+      "name": "Daily News Brief",
+      "enabled": true,
+      "createdAtMs": 1773634079219,
+      "updatedAtMs": 1773752912330,
+      "schedule": {
+        "kind": "cron",
+        "expr": "0 6 * * *",
+        "tz": "America/Los_Angeles"
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "Run the daily news brief: Execute n8n workflow daily-news-brief-001 to fetch RSS feeds, summarize with AI, and send to Discord. Command: ~/.npm-global/bin/n8n execute --id=daily-news-brief-001"
+      },
+      "delivery": {
+        "mode": "announce",
+        "channel": "last"
+      },
+      "state": {
+        "nextRunAtMs": 1773838800000,
+        "lastRunAtMs": 1773752400004,
+        "lastRunStatus": "error",
+        "lastStatus": "error",
+        "lastDurationMs": 512326,
+        "lastDeliveryStatus": "unknown",
+        "consecutiveErrors": 3,
+        "lastError": "Discord recipient is required. Use \"channel:<id>\" for channels or \"user:<id>\" for DMs."
+      }
+    },
+    {
+      "id": "7d949674-a11d-437e-a6a2-5c0f0ed56588",
+      "name": "Instance Health Check",
+      "enabled": true,
+      "createdAtMs": 1773672544493,
+      "updatedAtMs": 1773774014033,
+      "schedule": {
+        "kind": "cron",
+        "expr": "*/30 * * * *",
+        "tz": "America/Los_Angeles"
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "Run /home/ubuntu/.openclaw/workspace/scripts/instance-health.sh and use the message tool to send the raw output directly to Discord channel 1468408934904889572. Output ONLY what the script outputs - no additions, no summary, no commentary."
+      },
+      "delivery": {
+        "mode": "none",
+        "channel": "discord",
+        "to": "1468408934904889572"
+      },
+      "state": {
+        "nextRunAtMs": 1773775800000,
+        "lastRunAtMs": 1773774000008,
+        "lastRunStatus": "ok",
+        "lastStatus": "ok",
+        "lastDurationMs": 14025,
+        "lastDelivered": false,
+        "lastDeliveryStatus": "not-delivered",
+        "consecutiveErrors": 0
+      }
+    },
+    {
+      "id": "8a9a01ba-36ed-41e4-bb07-25f1b1fcfdcf",
+      "name": "n8n Failure Tracker",
+      "enabled": true,
+      "createdAtMs": 1773673129990,
+      "updatedAtMs": 1773774030996,
+      "schedule": {
+        "kind": "cron",
+        "expr": "*/30 * * * *",
+        "tz": "America/Los_Angeles"
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "Run the n8n failure tracker script at /home/ubuntu/.openclaw/workspace/scripts/n8n-failure-tracker.py to check for workflow failures in the last 30 minutes. Only post to Discord if there are failures found."
+      },
+      "delivery": {
+        "mode": "announce",
+        "channel": "discord",
+        "to": "1481676006480810004"
+      },
+      "state": {
+        "nextRunAtMs": 1773775800000,
+        "lastRunAtMs": 1773774014033,
+        "lastRunStatus": "ok",
+        "lastStatus": "ok",
+        "lastDurationMs": 16963,
+        "lastDelivered": true,
+        "lastDeliveryStatus": "delivered",
+        "consecutiveErrors": 0
+      }
+    },
+    {
+      "id": "context-manager-cron-001",
+      "name": "Context Manager",
+      "enabled": true,
+      "createdAtMs": 1773774662683,
+      "updatedAtMs": 1773774751339,
+      "schedule": {
+        "kind": "cron",
+        "expr": "*/30 * * * *",
+        "tz": "UTC"
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "payload": {
+        "kind": "shellExec",
+        "command": "python3 /home/ubuntu/.openclaw/workspace/scripts/context-manager.py"
+      },
+      "delivery": {
+        "mode": "silent"
+      },
+      "state": {
+        "nextRunAtMs": 1773775800000,
+        "lastRunAtMs": 1773774751339,
+        "lastRunStatus": "skipped",
+        "consecutiveErrors": 0,
+        "lastStatus": "skipped",
+        "lastDurationMs": 0,
+        "lastError": "isolated job requires payload.kind=agentTurn",
+        "lastDeliveryStatus": "unknown"
+      }
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+[Unit]
+Description=n8n workflow automation
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu
+Environment=NODE_ENV=production
+Environment=N8N_PORT=5678
+Environment=N8N_API_ENABLED=true
+Environment=N8N_API_KEY=dc10ae62e620a88773485be0a45ae49e621e37a438e1a466a469ae07cf65eaa9
+ExecStart=/home/ubuntu/.npm-global/bin/n8n start
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

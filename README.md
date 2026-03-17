@@ -8,6 +8,7 @@ Infrastructure, automation, and AI agent configuration for this server.
 |------|-------------|
 | `n8n-workflows/` | n8n workflow JSON exports (5 active workflows) |
 | `context-service/` | SQLite-backed context management service (port 3456) + cron manager |
+| `infra/` | Systemd service units and OpenClaw cron job configuration |
 
 ## Services
 
@@ -40,6 +41,22 @@ Default TTL: 24h. History capped at 50 entries per session.
 | Daily News Brief | ✅ Active | 6 AM PDT daily | Fetches BBC/Investing/Crypto RSS feeds, summarises with AI (Ollama), posts to Discord |
 | Email Monitor | ✅ Active | Gmail Trigger (unread) | Detects new unread emails via Gmail, marks as read, categorises with AI, sends Discord notification |
 | Test AI Agent | ⏸ Inactive | Manual | Development sandbox for testing AI agent chains |
+
+## Infrastructure
+
+Configuration files tracked in `infra/`:
+
+| File | Description |
+|------|-------------|
+| `n8n.service` | systemd unit for n8n (port 5678) |
+| `context-service.service` | systemd unit for context service (port 3456) |
+| `openclaw-cron-jobs.json` | OpenClaw cron job definitions (auto-update, news brief, health check, context manager) |
+
+To apply a service change:
+```bash
+sudo cp infra/n8n.service /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl restart n8n
+```
 
 ## Context Manager (OpenClaw cron)
 

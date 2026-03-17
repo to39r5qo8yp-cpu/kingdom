@@ -1,0 +1,15 @@
+[Unit]
+Description=n8n Context Management Service
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/context-service
+ExecStart=/usr/bin/python3 /home/ubuntu/context-service/server.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
