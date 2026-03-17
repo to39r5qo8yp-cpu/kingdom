@@ -1,0 +1,636 @@
+{
+  "name": "Calendar Bot",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 30
+            }
+          ]
+        }
+      },
+      "id": "sched-poll",
+      "name": "Poll Every Minute",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        240,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "getAll",
+        "guildId": {
+          "mode": "id",
+          "value": "1204113877139198042"
+        },
+        "channelId": {
+          "mode": "id",
+          "value": "1481657700248191107"
+        },
+        "limit": 10,
+        "options": {}
+      },
+      "id": "discord-get-msgs",
+      "name": "Fetch Discord Messages",
+      "type": "n8n-nodes-base.discord",
+      "typeVersion": 2,
+      "position": [
+        464,
+        400
+      ],
+      "webhookId": "3b504a98-7635-4be3-b763-11968f980f4f",
+      "credentials": {
+        "discordBotApi": {
+          "id": "ZDMFOE75AzwAAVO3",
+          "name": "Discord Bot account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const staticData = $getWorkflowStaticData('global');\nif (!staticData.lastMessageId) staticData.lastMessageId = '0';\n\nconst messages = $input.all().map(item => item.json);\n\n// Filter to only messages newer than lastMessageId\nconst newMessages = messages.filter(m => m.id && BigInt(m.id) > BigInt(staticData.lastMessageId));\n\nif (newMessages.length === 0) return [];\n\n// Update lastMessageId to the newest\nconst newestId = newMessages.reduce((max, m) => BigInt(m.id) > BigInt(max) ? m.id : max, staticData.lastMessageId);\nstaticData.lastMessageId = newestId;\n\n// Return oldest first\nreturn newMessages.reverse().map(m => ({ json: m }));"
+      },
+      "id": "code-filter-new",
+      "name": "Filter New Messages",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        688,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false
+          },
+          "conditions": [
+            {
+              "id": "bot-check",
+              "leftValue": "={{ $json.author?.bot }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "notEquals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "if-bot",
+      "name": "Skip Bot Messages",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        912,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const currentDate = new Date().toISOString().split('T')[0];\nconst rawMessage = $json.content || '';\nconst safeMessage = rawMessage.replace(/\\\\/g, '\\\\\\\\').replace(/\"/g, '\\\\\"');\n\nconst prompt = `You are a calendar assistant. Analyze the following message and return ONLY valid JSON with no explanation.\n\nClassify the intent as one of: \"create\", \"delete\", \"unclear\", or \"ignore\".\n- \"create\": user wants to schedule or add a calendar event\n- \"delete\": user wants to remove or cancel a calendar event\n- \"unclear\": message seems calendar-related but lacks enough detail\n- \"ignore\": message is unrelated to calendar management\n\nIf intent is \"create\" or \"delete\", extract:\n- title: event name (string)\n- date: ISO 8601 date (YYYY-MM-DD), infer from relative terms like \"tomorrow\", \"Friday\"\n- time: 24h time string (HH:MM), or null if not specified\n- allDay: boolean, true only if no time is mentioned and the event is clearly a full-day event\n\nToday's date is ${currentDate} (ISO 8601 format).\n\nReturn format:\n{\"intent\": \"...\", \"title\": \"...\", \"date\": \"...\", \"time\": \"...\", \"allDay\": false}\n\nMessage: \"${safeMessage}\"`;\n\nreturn [{ json: { prompt } }];"
+      },
+      "id": "code-prompt",
+      "name": "Build Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        368
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:11434/api/chat",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'llama3.2:latest', messages: [{ role: 'user', content: $json.prompt }], stream: false, format: 'json' }) }}",
+        "options": {}
+      },
+      "id": "http-ollama",
+      "name": "Call Ollama",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1344,
+        368
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const VALID_INTENTS = ['create', 'delete', 'unclear', 'ignore'];\n\nlet parsed;\ntry {\n  const content = $json.message?.content || $json.choices?.[0]?.message?.content || '';\n  parsed = typeof content === 'string' ? JSON.parse(content) : content;\n} catch (e) {\n  return [{ json: { intent: 'ignore', _parseError: true } }];\n}\n\nconst intent = parsed.intent;\nif (!VALID_INTENTS.includes(intent)) {\n  return [{ json: { intent: 'ignore', _invalidIntent: true } }];\n}\n\nif (intent === 'delete' && !parsed.date) {\n  return [{ json: { intent: 'unclear', _reason: 'delete_no_date' } }];\n}\n\nreturn [{ json: { ...parsed } }];"
+      },
+      "id": "code-parse",
+      "name": "Parse Ollama Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1568,
+        368
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {},
+            {},
+            {}
+          ]
+        },
+        "options": {}
+      },
+      "id": "switch-intent",
+      "name": "Route by Intent",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        1792,
+        368
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const { title, date, time, allDay } = $json;\nconst isAllDay = allDay === true || !time;\n\nlet start, end;\nif (isAllDay) {\n  start = { date };\n  end = { date };\n} else {\n  const startISO = `${date}T${time}:00Z`;\n  const endISO = new Date(new Date(startISO).getTime() + 3600000).toISOString();\n  start = { dateTime: startISO, timeZone: 'UTC' };\n  end = { dateTime: endISO, timeZone: 'UTC' };\n}\n\nreturn [{ json: { ...$json, start, end, isAllDay } }];"
+      },
+      "id": "code-prepare-event",
+      "name": "Prepare Event Fields",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2000,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "calendar": {
+          "mode": "list",
+          "value": "primary",
+          "__rl": true,
+          "cachedResultName": "Primary Calendar"
+        },
+        "start": "={{ $json.isAllDay ? $json.date : $json.date + 'T' + $json.time + ':00Z' }}",
+        "end": "={{ $json.isAllDay ? $json.date : new Date(new Date($json.date + 'T' + $json.time + ':00Z').getTime() + 3600000).toISOString() }}",
+        "additionalFields": {
+          "summary": "={{ $json.title }}"
+        }
+      },
+      "id": "gcal-create",
+      "name": "Create Calendar Event",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [
+        2224,
+        208
+      ],
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "gpzlCfoO3Gbg5AZX",
+          "name": "Google Calendar account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "guildId": {
+          "mode": "id",
+          "value": "1204113877139198042"
+        },
+        "channelId": {
+          "mode": "id",
+          "value": "1481657700248191107"
+        },
+        "content": "={{ '\u2705 Event created: **' + $('Prepare Event Fields').first().json.title + '** on ' + $('Prepare Event Fields').first().json.date + ($('Prepare Event Fields').first().json.isAllDay ? '' : ' at ' + $('Prepare Event Fields').first().json.time + ' UTC') }}",
+        "options": {}
+      },
+      "id": "discord-confirm-create",
+      "name": "Confirm Create",
+      "type": "n8n-nodes-base.discord",
+      "typeVersion": 2,
+      "position": [
+        2448,
+        208
+      ],
+      "webhookId": "d5914ec9-4209-4a6e-9239-b635f94041e3",
+      "credentials": {
+        "discordBotApi": {
+          "id": "ZDMFOE75AzwAAVO3",
+          "name": "Discord Bot account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "calendar": {
+          "mode": "list",
+          "value": "primary",
+          "__rl": true,
+          "cachedResultName": "Primary Calendar"
+        },
+        "returnAll": true,
+        "timeMin": "={{ $json.date + 'T00:00:00Z' }}",
+        "timeMax": "={{ $json.date + 'T23:59:59Z' }}",
+        "options": {
+          "query": "={{ $json.title }}"
+        }
+      },
+      "id": "gcal-search",
+      "name": "Search Calendar Events",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [
+        2000,
+        400
+      ],
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "gpzlCfoO3Gbg5AZX",
+          "name": "Google Calendar account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const matches = $input.all();\nconst deleteData = $('Parse Ollama Response').first().json;\nif (matches.length === 0) {\n  return [{ json: { _matchResult: 'none' } }];\n} else if (matches.length > 1) {\n  return [{ json: { _matchResult: 'multiple' } }];\n} else {\n  return [{ json: { _matchResult: 'single', eventId: matches[0].json.id, title: matches[0].json.summary } }];\n}"
+      },
+      "id": "code-check-matches",
+      "name": "Check Match Count",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2224,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {},
+            {}
+          ]
+        },
+        "options": {}
+      },
+      "id": "if-match-count",
+      "name": "Single Match?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        2448,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "delete",
+        "calendar": {
+          "mode": "list",
+          "value": "primary",
+          "__rl": true,
+          "cachedResultName": "Primary Calendar"
+        },
+        "eventId": "={{ $json.eventId }}",
+        "options": {}
+      },
+      "id": "gcal-delete",
+      "name": "Delete Calendar Event",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [
+        2672,
+        352
+      ],
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "gpzlCfoO3Gbg5AZX",
+          "name": "Google Calendar account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "guildId": {
+          "mode": "id",
+          "value": "1204113877139198042"
+        },
+        "channelId": {
+          "mode": "id",
+          "value": "1481657700248191107"
+        },
+        "content": "={{ '\ud83d\uddd1\ufe0f Deleted: **' + $('Check Match Count').first().json.title + '**' }}",
+        "options": {}
+      },
+      "id": "discord-confirm-delete",
+      "name": "Confirm Delete",
+      "type": "n8n-nodes-base.discord",
+      "typeVersion": 2,
+      "position": [
+        2880,
+        352
+      ],
+      "webhookId": "e33a2dcf-c751-4333-9bd2-e4b07f255982",
+      "credentials": {
+        "discordBotApi": {
+          "id": "ZDMFOE75AzwAAVO3",
+          "name": "Discord Bot account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "guildId": {
+          "mode": "id",
+          "value": "1204113877139198042"
+        },
+        "channelId": {
+          "mode": "id",
+          "value": "1481657700248191107"
+        },
+        "content": "Found multiple events matching that description. Please be more specific (e.g. include the time).",
+        "options": {}
+      },
+      "id": "discord-reply-multiple",
+      "name": "Reply Multiple Matches",
+      "type": "n8n-nodes-base.discord",
+      "typeVersion": 2,
+      "position": [
+        2672,
+        464
+      ],
+      "webhookId": "ba033760-03da-438d-bd20-713aa19bbddc",
+      "credentials": {
+        "discordBotApi": {
+          "id": "ZDMFOE75AzwAAVO3",
+          "name": "Discord Bot account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "guildId": {
+          "mode": "id",
+          "value": "1204113877139198042"
+        },
+        "channelId": {
+          "mode": "id",
+          "value": "1481657700248191107"
+        },
+        "content": "\u274c No event found matching that description.",
+        "options": {}
+      },
+      "id": "discord-reply-notfound",
+      "name": "Reply Not Found",
+      "type": "n8n-nodes-base.discord",
+      "typeVersion": 2,
+      "position": [
+        2672,
+        560
+      ],
+      "webhookId": "78ba0fcb-bff9-421d-b810-0005ef77fea1",
+      "credentials": {
+        "discordBotApi": {
+          "id": "ZDMFOE75AzwAAVO3",
+          "name": "Discord Bot account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "guildId": {
+          "mode": "id",
+          "value": "1204113877139198042"
+        },
+        "channelId": {
+          "mode": "id",
+          "value": "1481657700248191107"
+        },
+        "content": "Could you clarify? e.g. 'schedule a meeting Friday at 3pm' or 'delete my dentist appointment on Friday'",
+        "options": {}
+      },
+      "id": "discord-reply-unclear",
+      "name": "Reply Clarify",
+      "type": "n8n-nodes-base.discord",
+      "typeVersion": 2,
+      "position": [
+        2000,
+        592
+      ],
+      "webhookId": "1a478165-cb2a-4103-b583-4458aa57bbd6",
+      "credentials": {
+        "discordBotApi": {
+          "id": "ZDMFOE75AzwAAVO3",
+          "name": "Discord Bot account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Poll Every Minute": {
+      "main": [
+        [
+          {
+            "node": "Fetch Discord Messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Discord Messages": {
+      "main": [
+        [
+          {
+            "node": "Filter New Messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter New Messages": {
+      "main": [
+        [
+          {
+            "node": "Skip Bot Messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Skip Bot Messages": {
+      "main": [
+        [
+          {
+            "node": "Build Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Build Prompt": {
+      "main": [
+        [
+          {
+            "node": "Call Ollama",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Ollama": {
+      "main": [
+        [
+          {
+            "node": "Parse Ollama Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Ollama Response": {
+      "main": [
+        [
+          {
+            "node": "Route by Intent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by Intent": {
+      "main": [
+        [
+          {
+            "node": "Prepare Event Fields",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Search Calendar Events",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reply Clarify",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Prepare Event Fields": {
+      "main": [
+        [
+          {
+            "node": "Create Calendar Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Calendar Event": {
+      "main": [
+        [
+          {
+            "node": "Confirm Create",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search Calendar Events": {
+      "main": [
+        [
+          {
+            "node": "Check Match Count",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Match Count": {
+      "main": [
+        [
+          {
+            "node": "Single Match?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Single Match?": {
+      "main": [
+        [
+          {
+            "node": "Delete Calendar Event",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reply Multiple Matches",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reply Not Found",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete Calendar Event": {
+      "main": [
+        [
+          {
+            "node": "Confirm Delete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "active": true
+}

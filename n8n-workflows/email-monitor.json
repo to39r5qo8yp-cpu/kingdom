@@ -1,0 +1,271 @@
+{
+  "name": "Email Monitor with AI Categorization",
+  "nodes": [
+    {
+      "parameters": {},
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -80,
+        176
+      ],
+      "id": "manual-trigger-node"
+    },
+    {
+      "parameters": {
+        "options": {
+          "customEmailConfig": "[\"UNSEEN\"]"
+        }
+      },
+      "name": "Email Trigger (IMAP)",
+      "type": "n8n-nodes-base.emailReadImap",
+      "typeVersion": 2.1,
+      "position": [
+        -80,
+        -16
+      ],
+      "id": "imap-trigger-node",
+      "credentials": {
+        "imap": {
+          "id": "5fd9edc4-f3fc-418a-80d9-07c81b67a521",
+          "name": "Gmail IMAP"
+        }
+      },
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract email data and prepare for AI\nconst emailData = $input.first().json;\nconst headers = emailData.headers || {};\n\n// Get subject\nconst subject = emailData.subject || headers.subject || headers.Subject || \"(no subject)\";\n\n// Get from\nlet from = emailData.from || headers.from || headers.From || \"\";\nconst emailMatch = from.match(/<([^>]+)>/);\nif (emailMatch) from = emailMatch[1];\nif (!from.trim()) from = \"(unknown sender)\";\n\n// Get body - IMAP node uses textPlain/textHtml, NOT text/html\nconst textBody = emailData.textPlain || \"\";\nconst htmlBody = emailData.textHtml || \"\";\nconst fullBody = textBody || htmlBody.replace(/<[^>]*>/g, \" \").replace(/\\s+/g, \" \").trim();\nconst snippet = fullBody.substring(0, 3000);\n\nreturn [{\n  json: {\n    chatInput: `Analyze this email and classify it.\n\nEMAIL:\nSubject: \"${subject}\"\nFrom: \"${from}\"\nBody:\n${snippet}\n\nCATEGORIES:\n- URGENT: Requires immediate attention (security alerts, account issues, deadlines today)\n- ACTION_REQUIRED: Needs response or action within days\n- IMPORTANT: Worth reading but not time-critical\n- NOTIFICATION: Automated updates (order confirmations, bills)\n- SHIPPING: Package shipped notification\n- MARKETING: Promotional content, ads, sales\n- NEWSLETTER: Subscribed content, digests\n- SPAM: Unsolicited promotional content, scams\n\nRULES:\n1. If email is MARKETING, NEWSLETTER, or SPAM, return: {\"category\": \"SKIP\", \"reason\": \"brief reason\"}\n2. For all other categories, return: {\"category\": \"CATEGORY_NAME\", \"summary\": \"one-line summary\"}\n\nRespond with ONLY valid JSON. No markdown. No explanation.`,\n    subject: subject,\n    from: from,\n    snippet: snippet\n  }\n}];"
+      },
+      "name": "Prepare Email Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        160,
+        -16
+      ],
+      "id": "prepare-email-node"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "name": "AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        368,
+        -16
+      ],
+      "id": "ai-agent-node"
+    },
+    {
+      "parameters": {
+        "options": {
+          "temperature": 0.1
+        }
+      },
+      "name": "Ollama Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOllama",
+      "typeVersion": 1,
+      "position": [
+        368,
+        160
+      ],
+      "id": "ollama-model-node",
+      "credentials": {
+        "ollamaApi": {
+          "id": "dCTVfWIVTHlRhGsF",
+          "name": "Ollama account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse AI response and format message\nconst input = $input.first();\nconst emailData = $(\"Prepare Email Data\").first().json;\nconst aiResponse = input.json.output || input.json.response || input.json.text || JSON.stringify(input.json);\n\nlet content = aiResponse.toString().replace(/```json\\s*/g, \"\").replace(/```\\s*/g, \"\").trim();\n\nlet parsed;\ntry {\n  parsed = JSON.parse(content);\n} catch (e) {\n  const jsonMatch = content.match(/\\{[\\s\\S]*?\\}/);\n  if (jsonMatch) {\n    try { parsed = JSON.parse(jsonMatch[0]); }\n    catch (e2) { parsed = { category: \"SKIP\", reason: \"Parse failed\" }; }\n  } else {\n    parsed = { category: \"SKIP\", reason: \"No JSON found\" };\n  }\n}\n\nconst category = parsed.category || \"SKIP\";\nconst skipCategories = [\"SKIP\", \"SPAM\", \"MARKETING\", \"NEWSLETTER\"];\nif (skipCategories.includes(category)) return [];\n\nconst emoji = category === \"URGENT\" ? \"\ud83d\udea8\" : category === \"ACTION_REQUIRED\" ? \"\u26a0\ufe0f\" : category === \"IMPORTANT\" ? \"\ud83d\udce7\" : category === \"SHIPPING\" ? \"\ud83d\udce6\" : \"\ud83d\udce9\";\nconst summary = (parsed.summary || \"\").trim();\nconst from = emailData.from;\nconst subject = emailData.subject;\n\nlet message = emoji + \" **\" + category + \"**\\n\\n**From:** \" + from + \"\\n**Subject:** \" + subject;\nif (summary) {\n  message += \"\\n**Summary:** \" + summary;\n}\n\nreturn [{ json: { message: message } }];"
+      },
+      "name": "Process & Filter Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        688,
+        -16
+      ],
+      "id": "process-filter-node"
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "guildId": {
+          "mode": "id",
+          "value": "1204113877139198042"
+        },
+        "channelId": {
+          "mode": "id",
+          "value": "1471890072222830633"
+        },
+        "content": "={{ $json.message }}",
+        "options": {}
+      },
+      "name": "Discord Notification",
+      "type": "n8n-nodes-base.discord",
+      "typeVersion": 2,
+      "position": [
+        912,
+        -16
+      ],
+      "id": "discord-notify-node",
+      "webhookId": "c3f8b907-1633-4f88-8630-044fee30ab9f",
+      "credentials": {
+        "discordBotApi": {
+          "id": "ZDMFOE75AzwAAVO3",
+          "name": "Discord Bot account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "filters": {
+          "readStatus": "unread"
+        }
+      },
+      "id": "gmail-trigger-node",
+      "name": "Gmail Trigger",
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -80,
+        -240
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "tfKyJaeALmrkFNaS",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "markAsRead",
+        "messageId": "={{ $json.id }}"
+      },
+      "id": "gmail-mark-read-node",
+      "name": "Mark As Read",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        160,
+        -240
+      ],
+      "webhookId": "dd23b3e5-c10f-409f-9ade-f8f8698b4c40",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "tfKyJaeALmrkFNaS",
+          "name": "Gmail account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Prepare Email Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email Trigger (IMAP)": {
+      "main": [
+        [
+          {
+            "node": "Prepare Email Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Email Data": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Process & Filter Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process & Filter Response": {
+      "main": [
+        [
+          {
+            "node": "Discord Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gmail Trigger": {
+      "main": [
+        [
+          {
+            "node": "Mark As Read",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark As Read": {
+      "main": [
+        [
+          {
+            "node": "Prepare Email Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": true
+}
