@@ -1,0 +1,377 @@
+{
+  "id": "trading-monitor-001",
+  "name": "Trading Monitor Portfolio",
+  "active": 1,
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 6 * * 1-5"
+            }
+          ]
+        },
+        "options": {
+          "timezone": "America/Los_Angeles"
+        }
+      },
+      "name": "Morning Schedule",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -400,
+        208
+      ],
+      "id": "morning-schedule"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 13 * * 1-5"
+            }
+          ]
+        },
+        "options": {
+          "timezone": "America/Los_Angeles"
+        }
+      },
+      "name": "Afternoon Schedule",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -400,
+        400
+      ],
+      "id": "afternoon-schedule"
+    },
+    {
+      "parameters": {},
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -400,
+        0
+      ],
+      "id": "manual"
+    },
+    {
+      "parameters": {
+        "filePath": "/home/ubuntu/.n8n-files/Trading/positions/active.json",
+        "options": {
+          "errorHandling": "continue"
+        }
+      },
+      "name": "Load Positions",
+      "type": "n8n-nodes-base.readBinaryFile",
+      "typeVersion": 1,
+      "position": [
+        -208,
+        208
+      ],
+      "id": "load-positions"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse positions from loaded file\nlet positions = {};\ntry {\n  const binaryData = $input.first().binary?.data?.data;\n  if (binaryData) {\n    const parsed = JSON.parse(Buffer.from(binaryData, 'base64').toString('utf-8'));\n    positions = parsed.positions || {};\n  }\n} catch (e) {\n  // Fallback: empty positions\n  positions = {};\n}\n\nconst watchlist = {\n  stocks: ['NVDA', 'MSFT', 'GOOGL', 'AAPL', 'VOO'],\n  crypto: ['ethereum', 'solana']\n};\n\nconst now = new Date();\nconst hour = now.getHours();\n// Morning fires at 6 AM PDT, Afternoon at 1 PM PDT\nconst timeLabel = hour < 10 ? 'morning' : 'afternoon';\n\nreturn [{\n  json: {\n    positions,\n    watchlist,\n    timeLabel,\n    isReport: true,\n    source: 'Trading Monitor'\n  }\n}];"
+      },
+      "name": "Prepare Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        0,
+        208
+      ],
+      "id": "prepare-input"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "quant-analyst-core-001",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "name": "Quant Analyst Core",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1,
+      "position": [
+        208,
+        208
+      ],
+      "id": "quant-core"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nconst signals = input.signals || [];\nconst stocks = input.stocks || [];\nconst crypto = input.crypto || [];\nconst positions = input.positions || {};\nconst timeLabel = $('Prepare Input').first().json.timeLabel;\n\nconst now = new Date();\nconst dateStr = now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });\n\n// Build Markdown report (full)\nconst lines = [];\nlines.push(`# Trading Report \u2014 ${dateStr}`);\nlines.push(`\\n**Session:** ${timeLabel.toUpperCase()} (${now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })})`);\nlines.push('\\n## Market Overview');\nlines.push(input.market_overview || 'Market analysis pending.');\n\nif (Object.keys(positions).length > 0) {\n  lines.push('\\n## Positions');\n  for (const [id, pos] of Object.entries(positions)) {\n    const data = stocks.find(s => s.symbol?.toLowerCase() === pos.symbol?.toLowerCase()) ||\n                 crypto.find(c => c.id?.toLowerCase() === pos.symbol?.toLowerCase());\n    const price = data?.current_price || 'N/A';\n    const pnl = data ? ((data.current_price - pos.entry_price) / pos.entry_price * 100).toFixed(2) : 0;\n    lines.push(`\\n**${pos.symbol}**`);\n    lines.push(`- Entry: $${pos.entry_price} | Current: $${price} | P&L: ${pnl >= 0 ? '+' : ''}${pnl}%`);\n    lines.push(`- Stop: $${pos.stop_loss} | Target: $${pos.take_profit}`);\n    if (data) lines.push(`- RSI: ${data.rsi_14 || data.rsi_14_approx || 'N/A'}`);\n  }\n}\n\nlines.push('\\n## Watchlist Analysis');\nif (stocks.length > 0) {\n  lines.push('\\n**Stocks:**');\n  stocks.forEach(s => {\n    const sig = signals.find(sig => sig.symbol === s.symbol);\n    const confidence = sig ? ` [${sig.confidence}/100]` : '';\n    const action = sig ? ` \u2014 ${sig.action.toUpperCase()}` : '';\n    lines.push(`- ${s.symbol}: $${s.current_price} (${s.week_change_pct > 0 ? '+' : ''}${s.week_change_pct}%)${confidence}${action}`);\n    lines.push(`  RSI: ${s.rsi_14} | Vol: ${s.volume_ratio}x`);\n  });\n}\nif (crypto.length > 0) {\n  lines.push('\\n**Crypto:**');\n  crypto.forEach(c => {\n    const sig = signals.find(sig => sig.symbol === c.symbol || sig.id === c.id);\n    const confidence = sig ? ` [${sig.confidence}/100]` : '';\n    const action = sig ? ` \u2014 ${sig.action.toUpperCase()}` : '';\n    lines.push(`- ${c.symbol}: $${c.current_price} (${c.week_change_pct > 0 ? '+' : ''}${c.week_change_pct}%)${confidence}${action}`);\n  });\n}\n\nlines.push('\\n## Top Signals');\nconst topSignals = signals.slice(0, 5);\nif (topSignals.length > 0) {\n  topSignals.forEach((s, i) => {\n    const urgencyEmoji = s.urgency === 'critical' ? '!!!' : s.urgency === 'high' ? '!!' : '!';\n    lines.push(`${i + 1}. ${urgencyEmoji} **${s.symbol}**: ${s.action.toUpperCase()} (${s.confidence}/100)`);\n    lines.push(`   ${s.reason}`);\n    if (s.tech_reasons?.length) lines.push(`   _Tech: ${s.tech_reasons.join(', ')}_`);\n  });\n} else {\n  lines.push('No significant signals at this time.');\n}\n\nlines.push('\\n## Recommendations');\nlines.push(input.recommendations || 'No specific recommendations at this time.');\nlines.push('\\n## Risk Assessment');\nlines.push(input.risk_assessment || 'Market conditions normal.');\n\n// Build Discord message (actionable format)\nconst discordLines = [];\ndiscordLines.push(`**${timeLabel.charAt(0).toUpperCase() + timeLabel.slice(1)} Trading Report**`);\ndiscordLines.push(dateStr);\ndiscordLines.push('');\n\n// Market overview (brief)\nif (input.market_overview) {\n  const brief = input.market_overview.substring(0, 150);\n  discordLines.push(brief + (input.market_overview.length > 150 ? '...' : ''));\n  discordLines.push('');\n}\n\n// Actionable signals\nif (signals.length > 0) {\n  discordLines.push('**Actionable Signals:**');\n  signals.slice(0, 3).forEach(s => {\n    const action = (s.signal || s.action || 'hold').toUpperCase();\n    const emoji = action === 'BUY' ? '\ud83d\udfe2' : action === 'SELL' ? '\ud83d\udd34' : '\u26aa';\n    const conf = s.confidence || 50;\n    \n    discordLines.push('');\n    discordLines.push(`${emoji} **${s.symbol} ${action}** (${conf}% confidence)`);\n    \n    // Entry/Stop/Target\n    if (s.key_levels) {\n      const entry = s.key_levels.entry || s.price;\n      discordLines.push(`Entry: $${typeof entry === 'number' ? entry.toFixed(2) : entry}`);\n      if (s.key_levels.stop) discordLines.push(`Stop: $${s.key_levels.stop.toFixed(2)}`);\n      if (s.key_levels.target) discordLines.push(`Target: $${s.key_levels.target.toFixed(2)}`);\n    }\n    \n    // Reasoning\n    if (s.reasons && s.reasons.length > 0) {\n      discordLines.push(`_${s.reasons.slice(0, 2).join('; ')}_`);\n    }\n  });\n} else {\n  discordLines.push('No actionable signals at this time.');\n}\n\n// VOO Strategy if available\nif (input.voo_gameplan) {\n  discordLines.push('');\n  discordLines.push('**VOO Strategy:**');\n  discordLines.push(input.voo_gameplan.strategy || 'N/A');\n  if (input.voo_gameplan.position_size) {\n    discordLines.push(`Position: ${input.voo_gameplan.position_size}`);\n  }\n}\n\nconst discordMessage = discordLines.join('\\n');\n\nreturn [{\n  json: {\n    reportContent: lines.join('\\n'),\n    discordMessage,\n    marketOverview: input.market_overview,\n    signals,\n    stocks,\n    crypto,\n    positions,\n    timeLabel,\n    timestamp: now.toISOString()\n  }\n}];\n"
+      },
+      "name": "Build Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        208
+      ],
+      "id": "build-report"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Convert text to binary for file writing\nconst input = $('Build Report').first().json;\nconst reportContent = input.reportContent;\n\n// Create binary data (base64 encoded)\nconst binaryData = Buffer.from(reportContent).toString('base64');\n\nreturn [{\n  json: input,\n  binary: {\n    data: {\n      data: binaryData,\n      mimeType: 'text/markdown',\n      fileName: new Date().toISOString().split('T')[0] + '.md',\n      fileExtension: 'md'\n    }\n  }\n}];"
+      },
+      "name": "Prepare Binary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        208
+      ],
+      "id": "prepare-binary"
+    },
+    {
+      "parameters": {
+        "fileName": "={{ '/home/ubuntu/.n8n-files/Trading/daily/' + new Date().toISOString().split('T')[0] + '.md' }}",
+        "options": {}
+      },
+      "name": "Save to Obsidian",
+      "type": "n8n-nodes-base.writeBinaryFile",
+      "typeVersion": 1,
+      "position": [
+        608,
+        112
+      ],
+      "id": "save-obsidian"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $('Build Report').first().json;\nconst stocks = input.stocks || [];\nconst crypto = input.crypto || [];\nconst signals = input.signals || [];\n\nconst lines = [];\nlines.push('<!DOCTYPE html><html><head><style>');\nlines.push('body { font-family: -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, sans-serif; background: #1a1a2e; color: #eee; padding: 20px; }');\nlines.push('.container { max-width: 600px; margin: 0 auto; }');\nlines.push('.header { text-align: center; margin-bottom: 24px; }');\nlines.push('.header h1 { color: #4ade80; margin: 0; }');\nlines.push('.header .time { color: #888; font-size: 14px; }');\nlines.push('.section { background: #16213e; border-radius: 8px; padding: 16px; margin-bottom: 16px; }');\nlines.push('.section h2 { color: #60a5fa; margin-top: 0; font-size: 18px; }');\nlines.push('.stock { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #2d3a5e; }');\nlines.push('.stock:last-child { border-bottom: none; }');\nlines.push('.symbol { font-weight: bold; }');\nlines.push('.price { color: #4ade80; }');\nlines.push('.price.down { color: #f87171; }');\nlines.push('.signal { background: #1e3a5f; padding: 12px; border-radius: 8px; margin-bottom: 8px; }');\nlines.push('.signal .action { font-weight: bold; text-transform: uppercase; }');\nlines.push('.signal .action.buy { color: #4ade80; }');\nlines.push('.signal .action.sell { color: #f87171; }');\nlines.push('.recommendations { background: #16213e; border-left: 4px solid #f59e0b; padding: 16px; margin-top: 16px; }');\nlines.push('</style></head><body>');\nlines.push('<div class=\"container\">');\n\nlines.push(`<div class=\"header\"><h1>${input.timeLabel.charAt(0).toUpperCase() + input.timeLabel.slice(1)} Report</h1>`);\nlines.push(`<div class=\"time\">${new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</div></div>`);\n\nlines.push('<div class=\"section\"><h2>Market Overview</h2>');\nlines.push(`<p>${input.marketOverview || 'Market analysis pending.'}</p></div>`);\n\nif (Object.keys(input.positions || {}).length > 0) {\n  lines.push('<div class=\"section\"><h2>Positions</h2>');\n  for (const [id, pos] of Object.entries(input.positions)) {\n    const data = stocks.find(s => s.symbol?.toLowerCase() === pos.symbol?.toLowerCase()) ||\n                 crypto.find(c => c.id?.toLowerCase() === pos.symbol?.toLowerCase());\n    const price = data?.current_price || 'N/A';\n    const pnl = data ? ((data.current_price - pos.entry_price) / pos.entry_price * 100).toFixed(2) : 0;\n    lines.push(`<div class=\"stock\"><span class=\"symbol\">${pos.symbol}</span>`);\n    lines.push(`<span>$${pos.entry_price} -> $${price} (${pnl >= 0 ? '+' : ''}${pnl}%)</span></div>`);\n  }\n  lines.push('</div>');\n}\n\nlines.push('<div class=\"section\"><h2>Top Signals</h2>');\nsignals.slice(0, 5).forEach(s => {\n  lines.push(`<div class=\"signal\">`);\n  lines.push(`<span class=\"action ${s.action}\">${s.symbol}: ${s.action}</span>`);\n  lines.push(` <span>(${s.confidence}/100)</span>`);\n  lines.push(`<br><small>${s.reason}</small>`);\n  lines.push(`</div>`);\n});\nlines.push('</div>');\n\nlines.push('<div class=\"recommendations\"><h2>Recommendations</h2>');\nlines.push(`<p>${input.recommendations || 'No specific recommendations.'}</p></div>`);\n\nlines.push('</div></body></html>');\n\nreturn [{\n  json: {\n    html: lines.join('\\n'),\n    subject: `Trading Report \u2014 ${input.timeLabel.charAt(0).toUpperCase() + input.timeLabel.slice(1)} Update`,\n    to: 'sharingando@gmail.com',\n    timeLabel: input.timeLabel,\n    marketOverview: input.marketOverview,\n    signals: input.signals\n  }\n}];"
+      },
+      "name": "Format Email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        608,
+        304
+      ],
+      "id": "format-email"
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.to }}",
+        "subject": "={{ $json.subject }}",
+        "message": "={{ $json.html }}",
+        "options": {}
+      },
+      "name": "Send Email",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        800,
+        304
+      ],
+      "id": "send-email",
+      "webhookId": "1c21a76f-e85b-463d-9e91-a50e5ded082b",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "tfKyJaeALmrkFNaS",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "guildId": {
+          "mode": "id",
+          "value": "1204113877139198042"
+        },
+        "channelId": {
+          "mode": "id",
+          "value": "1479570494385684603"
+        },
+        "content": "={{ $json.discordMessage }}",
+        "options": {}
+      },
+      "name": "Discord Summary",
+      "type": "n8n-nodes-base.discord",
+      "typeVersion": 2,
+      "position": [
+        800,
+        112
+      ],
+      "id": "discord",
+      "webhookId": "bd21a6ef-b0a6-403a-ae02-c8fb20777d25",
+      "credentials": {
+        "discordBotApi": {
+          "id": "ZDMFOE75AzwAAVO3",
+          "name": "Discord Bot account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "trading-monitor-trigger",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -400,
+        208
+      ],
+      "webhookId": "c029c121-51fd-428a-8ab0-a27caaab5893"
+    }
+  ],
+  "connections": {
+    "Morning Schedule": {
+      "main": [
+        [
+          {
+            "node": "Load Positions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Afternoon Schedule": {
+      "main": [
+        [
+          {
+            "node": "Load Positions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Load Positions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Positions": {
+      "main": [
+        [
+          {
+            "node": "Prepare Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Input": {
+      "main": [
+        [
+          {
+            "node": "Quant Analyst Core",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Quant Analyst Core": {
+      "main": [
+        [
+          {
+            "node": "Build Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Report": {
+      "main": [
+        [
+          {
+            "node": "Prepare Binary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Email": {
+      "main": [
+        [
+          {
+            "node": "Send Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Binary": {
+      "main": [
+        [
+          {
+            "node": "Save to Obsidian",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Format Email",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Discord Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save to Obsidian": {},
+    "Send Email": {},
+    "Discord Summary": {},
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Load Positions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false,
+    "errorWorkflow": "RkD096H7kDZmEGcP"
+  },
+  "staticData": {
+    "node:Morning Schedule": {
+      "recurrenceRules": []
+    },
+    "node:Afternoon Schedule": {
+      "recurrenceRules": []
+    }
+  },
+  "pinData": {},
+  "versionId": "0f9022ed-18bc-47ed-8ffe-53107bfdb2f2",
+  "triggerCount": 3,
+  "updatedAt": "2026-04-05 15:42:36.226",
+  "createdAt": "2026-03-26 14:19:22.000"
+}
