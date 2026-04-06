@@ -1,9 +1,8 @@
 {
-  "updatedAt": "2026-04-02T00:42:12.989Z",
+  "updatedAt": "2026-04-04T05:01:55.881Z",
   "createdAt": "2026-03-18T03:33:13.795Z",
   "id": "PjGsqBwbj30YlMoM",
   "name": "Job Search",
-  "description": null,
   "active": true,
   "isArchived": false,
   "nodes": [
@@ -834,7 +833,6 @@
   "pinData": {},
   "versionId": "d396bcd6-474d-4a6e-aa39-1a4ce9f17640",
   "activeVersionId": "d396bcd6-474d-4a6e-aa39-1a4ce9f17640",
-  "versionCounter": 310,
   "triggerCount": 1,
   "shared": [
     {
@@ -842,20 +840,9 @@
       "createdAt": "2026-03-18T03:33:13.798Z",
       "role": "workflow:owner",
       "workflowId": "PjGsqBwbj30YlMoM",
-      "projectId": "2wMuHrOZ0KpAorzn",
-      "project": {
-        "updatedAt": "2026-03-15T01:06:51.004Z",
-        "createdAt": "2026-03-15T01:05:30.851Z",
-        "id": "2wMuHrOZ0KpAorzn",
-        "name": "monday bot <a3171998@gmail.com>",
-        "type": "personal",
-        "icon": null,
-        "description": null,
-        "creatorId": "dc157584-5741-4a40-a086-70a91678825f"
-      }
+      "projectId": "2wMuHrOZ0KpAorzn"
     }
   ],
-  "tags": [],
   "activeVersion": {
     "updatedAt": "2026-04-02T00:41:09.751Z",
     "createdAt": "2026-04-02T00:41:09.751Z",
@@ -1673,40 +1660,7 @@
     "authors": "monday bot",
     "name": null,
     "description": null,
-    "autosaved": false,
-    "workflowPublishHistory": [
-      {
-        "createdAt": "2026-04-02T00:41:09.827Z",
-        "id": 171,
-        "workflowId": "PjGsqBwbj30YlMoM",
-        "versionId": "d396bcd6-474d-4a6e-aa39-1a4ce9f17640",
-        "event": "activated",
-        "userId": "dc157584-5741-4a40-a086-70a91678825f"
-      },
-      {
-        "createdAt": "2026-04-02T00:42:13.040Z",
-        "id": 178,
-        "workflowId": "PjGsqBwbj30YlMoM",
-        "versionId": "d396bcd6-474d-4a6e-aa39-1a4ce9f17640",
-        "event": "activated",
-        "userId": "dc157584-5741-4a40-a086-70a91678825f"
-      },
-      {
-        "createdAt": "2026-04-02T00:41:09.805Z",
-        "id": 170,
-        "workflowId": "PjGsqBwbj30YlMoM",
-        "versionId": "d396bcd6-474d-4a6e-aa39-1a4ce9f17640",
-        "event": "deactivated",
-        "userId": "dc157584-5741-4a40-a086-70a91678825f"
-      },
-      {
-        "createdAt": "2026-04-02T00:42:13.022Z",
-        "id": 177,
-        "workflowId": "PjGsqBwbj30YlMoM",
-        "versionId": "d396bcd6-474d-4a6e-aa39-1a4ce9f17640",
-        "event": "deactivated",
-        "userId": "dc157584-5741-4a40-a086-70a91678825f"
-      }
-    ]
-  }
+    "autosaved": false
+  },
+  "tags": []
 }

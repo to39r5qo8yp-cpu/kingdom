@@ -1,0 +1,85 @@
+{
+  "updatedAt": "2026-04-03T23:27:54.363Z",
+  "createdAt": "2026-04-03T23:27:54.363Z",
+  "id": "Jezeb9EhMAgtEpG2",
+  "name": "Memory Notify",
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "memory-notify"
+      },
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "7a161d3b-f111-4dd2-8000-91794ef13af0"
+    },
+    {
+      "parameters": {
+        "content": "\ud83e\udde0 Shared Memory Setup Complete\n\nDevice ID: IALK2TM-63H6TH2-RH74RLJ-VAGQOX7-ARWNKNP-AGR4PXA-HEPA2OJ-HIKAIAJ\nPublic IP: 129.146.85.212\nGUI: http://129.146.85.212:8384/\n\nSetup: Install Syncthing, add remote device, accept Memory folder share.",
+        "guildId": {
+          "mode": "id",
+          "value": "1204113877139198042"
+        },
+        "channelId": {
+          "mode": "id",
+          "value": "1419496512118980718"
+        }
+      },
+      "name": "Discord",
+      "type": "n8n-nodes-base.discord",
+      "typeVersion": 2,
+      "position": [
+        200,
+        0
+      ],
+      "credentials": {
+        "discordBotApi": {
+          "id": "ZDMFOE75AzwAAVO3",
+          "name": "Discord Bot account"
+        }
+      },
+      "id": "30791968-9b73-4c7d-a8aa-2007e572fa45"
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Discord",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": null,
+  "versionId": "2b0dd728-adba-4c63-8303-858ca74a7ef7",
+  "activeVersionId": null,
+  "triggerCount": 0,
+  "shared": [
+    {
+      "updatedAt": "2026-04-03T23:27:54.365Z",
+      "createdAt": "2026-04-03T23:27:54.365Z",
+      "role": "workflow:owner",
+      "workflowId": "Jezeb9EhMAgtEpG2",
+      "projectId": "2wMuHrOZ0KpAorzn"
+    }
+  ],
+  "activeVersion": null,
+  "tags": []
+}

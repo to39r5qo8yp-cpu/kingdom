@@ -1,9 +1,8 @@
 {
-  "updatedAt": "2026-04-02T00:42:13.536Z",
+  "updatedAt": "2026-04-05T15:42:35.973Z",
   "createdAt": "2026-03-26T18:03:57.699Z",
   "id": "trading-signals-001",
-  "name": "Trading Signals Monitor v2.0 - Enhanced",
-  "description": null,
+  "name": "Trading Signals Enhanced",
   "active": true,
   "isArchived": false,
   "nodes": [
@@ -27,12 +26,13 @@
       },
       "name": "Webhook Trigger",
       "type": "n8n-nodes-base.webhook",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [
         -600,
         400
       ],
-      "id": "webhook-trigger"
+      "id": "webhook-trigger",
+      "webhookId": "f7e8a9b2-c3d4-45e6-8f7a-0b1c2d3e4f5a"
     },
     {
       "parameters": {
@@ -128,7 +128,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const input = $input.first().json;\nconst signals = input.signals || [];\nconst timestamp = input.timestamp;\nconst optimizedParams = input.optimizedParams || {};\nconst dataRange = input.analysisData?.data_range || input.dataRange || 'N/A';\n\n// Categorize signals by priority with optimized thresholds\nconst critical = signals.filter(s => \n  s.urgency === 'critical' || (s.confidence >= 85 && s.action !== 'hold')\n);\n\nconst high = signals.filter(s => \n  (s.confidence >= 75 && s.confidence < 85 && s.action !== 'hold') ||\n  (s.urgency === 'high' && s.confidence >= 65)\n);\n\nconst medium = signals.filter(s => \n  s.urgency === 'medium' || \n  (s.confidence >= 60 && s.confidence < 75 && s.action !== 'hold')\n);\n\nconst low = signals.filter(s => s.confidence < 60 || s.action === 'hold');\n\n// Discord: Critical and High (confidence >= 75)\nconst discordSignals = [...critical, ...high.filter(s => s.confidence >= 75)];\n\n// Build Discord message\nlet discordMessage = '';\nif (discordSignals.length > 0) {\n  const now = new Date();\n  const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });\n  \n  if (critical.length > 0) {\n    discordMessage = '**\ud83d\udea8 CRITICAL ALERTS**\\n\\n';\n    critical.forEach(s => {\n      const emoji = s.action === 'buy' ? '\ud83d\udfe2' : s.action === 'sell' ? '\ud83d\udd34' : '\u26aa';\n      discordMessage += `${emoji} **${s.symbol}**: ${s.action.toUpperCase()} (${s.confidence}/100)\\n`;\n      discordMessage += `> ${s.reason}\\n`;\n      if (s.tech_reasons?.length) discordMessage += `> Tech: ${s.tech_reasons.join(', ')}\\n`;\n      if (s.key_levels) {\n        discordMessage += `> Levels: Entry $${s.key_levels.entry} | Stop $${s.key_levels.stop} | Target $${s.key_levels.target}\\n`;\n      }\n    });\n    discordMessage += '\\n';\n  }\n  \n  if (high.filter(s => s.confidence >= 75).length > 0) {\n    discordMessage += '**\ud83d\udcca High Priority Signals**\\n';\n    high.filter(s => s.confidence >= 75).forEach(s => {\n      const emoji = s.action === 'buy' ? '\ud83d\udfe2' : s.action === 'sell' ? '\ud83d\udd34' : '\u26aa';\n      discordMessage += `${emoji} ${s.symbol}: ${s.action.toUpperCase()} (${s.confidence}/100)\\n`;\n      discordMessage += `   ${s.reason}\\n`;\n    });\n  }\n  \n  discordMessage += `\\n\u23f0 ${timeStr} PT | \ud83d\udcca ${dataRange}`;\n}\n\n// Build Obsidian content (all signals)\nconst obsidianLines = [];\nconst now = new Date();\nobsidianLines.push(`# Trading Signals - ${now.toISOString().split('T')[0]}`);\nobsidianLines.push(`\\n**Time:** ${now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })} PT`);\nobsidianLines.push(`\\n**Data Range:** ${dataRange}`);\nobsidianLines.push(`\\n**Optimized Parameters Active:** \u2705`);\nobsidianLines.push(`- RSI Oversold: ${optimizedParams.thresholds?.rsi_oversold || 30}`);\nobsidianLines.push(`- RSI Overbought: ${optimizedParams.thresholds?.rsi_overbought || 70}`);\nobsidianLines.push(`- Volume Spike: ${optimizedParams.thresholds?.volume_spike_multiplier || 1.5}x\\n`);\nobsidianLines.push(`## Market Overview\\n${input.market_overview || 'N/A'}\\n`);\n\nif (signals.length > 0) {\n  obsidianLines.push('## Signals\\n');\n  \n  if (critical.length > 0) {\n    obsidianLines.push('### \ud83d\udea8 Critical\\n');\n    critical.forEach(s => {\n      obsidianLines.push(`#### ${s.symbol} - ${s.action.toUpperCase()}`);\n      obsidianLines.push(`- **Confidence:** ${s.confidence}/100`);\n      obsidianLines.push(`- **Urgency:** ${s.urgency || 'critical'}`);\n      obsidianLines.push(`- **Price:** $${s.price || 'N/A'}`);\n      obsidianLines.push(`- **Reason:** ${s.reason}`);\n      if (s.tech_reasons?.length) obsidianLines.push(`- **Technical:** ${s.tech_reasons.join(', ')}`);\n      if (s.key_levels) obsidianLines.push(`- **Levels:** Entry $${s.key_levels.entry}, Stop $${s.key_levels.stop}, Target $${s.key_levels.target}`);\n      obsidianLines.push('');\n    });\n  }\n  \n  if (high.length > 0) {\n    obsidianLines.push('### \ud83d\udcca High Priority\\n');\n    high.forEach(s => {\n      obsidianLines.push(`#### ${s.symbol} - ${s.action.toUpperCase()}`);\n      obsidianLines.push(`- **Confidence:** ${s.confidence}/100`);\n      obsidianLines.push(`- **Price:** $${s.price || 'N/A'}`);\n      obsidianLines.push(`- **Reason:** ${s.reason}`);\n      if (s.tech_reasons?.length) obsidianLines.push(`- **Technical:** ${s.tech_reasons.join(', ')}`);\n      obsidianLines.push('');\n    });\n  }\n  \n  if (medium.length > 0) {\n    obsidianLines.push('### \u26aa Medium Priority\\n');\n    medium.forEach(s => {\n      obsidianLines.push(`- ${s.symbol}: ${s.action.toUpperCase()} (${s.confidence}/100) - ${s.reason}`);\n    });\n    obsidianLines.push('');\n  }\n}\n\nobsidianLines.push('## Recommendations');\nobsidianLines.push(input.recommendations || 'N/A');\nobsidianLines.push('\\n## Risk Assessment');\nobsidianLines.push(input.risk_assessment || 'N/A');\n\nif (optimizedParams.performance_metrics) {\n  obsidianLines.push('\\n## Backtest Performance (Walk-Forward Validated)');\n  obsidianLines.push(`- **Avg Sharpe Ratio:** ${optimizedParams.performance_metrics.avg_sharpe_ratio}`);\n  obsidianLines.push(`- **Avg Total Return:** ${optimizedParams.performance_metrics.avg_total_return}%`);\n  obsidianLines.push(`- **Optimization Date:** ${optimizedParams.performance_metrics.optimization_date}`);\n}\n\n// Truncate to Discord's 2000 char limit\nif (discordMessage.length > 1950) {\n  discordMessage = discordMessage.substring(0, 1940) + '\\n\u2026(truncated)';\n}\n\nreturn [{\n  json: {\n    sendDiscord: discordMessage.length > 0,\n    discordMessage,\n    obsidianContent: obsidianLines.join('\\n'),\n    signals,\n    criticalCount: critical.length,\n    highCount: high.length,\n    mediumCount: medium.length,\n    lowCount: low.length,\n    timestamp,\n    dataRange,\n    optimizedParams\n  }\n}];"
+        "jsCode": "const input = $input.first().json;\nconst signals = input.signals || [];\nconst timestamp = input.timestamp;\nconst optimizedParams = input.optimizedParams || {};\n\n// Categorize signals by priority with optimized thresholds\nconst critical = signals.filter(s => \n  s.urgency === 'critical' || (s.confidence >= 85 && s.action !== 'hold')\n);\n\nconst high = signals.filter(s => \n  (s.confidence >= 75 && s.confidence < 85 && s.action !== 'hold') ||\n  (s.urgency === 'high' && s.confidence >= 65)\n);\n\nconst medium = signals.filter(s => \n  s.urgency === 'medium' || \n  (s.confidence >= 60 && s.confidence < 75 && s.action !== 'hold')\n);\n\nconst low = signals.filter(s => s.confidence < 60 || s.action === 'hold');\n\n// Discord: Critical and High (confidence >= 75)\nconst discordSignals = [...critical, ...high.filter(s => s.confidence >= 75)];\n\n// Build Discord message\nlet discordMessage = '';\nif (discordSignals.length > 0) {\n  const now = new Date();\n  const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });\n  \n  if (critical.length > 0) {\n    discordMessage = '**\ud83d\udea8 CRITICAL ALERTS**\\n\\n';\n    critical.forEach(s => {\n      const emoji = s.action === 'buy' ? '\ud83d\udfe2' : s.action === 'sell' ? '\ud83d\udd34' : '\u26aa';\n      discordMessage += `${emoji} **${s.symbol}**: ${s.action.toUpperCase()} (${s.confidence}/100)\\n`;\n      discordMessage += `> ${s.reason}\\n`;\n      if (s.tech_reasons?.length) discordMessage += `> Tech: ${s.tech_reasons.join(', ')}\\n`;\n      if (s.key_levels) {\n        discordMessage += `> Levels: Entry $${s.key_levels.entry} | Stop $${s.key_levels.stop} | Target $${s.key_levels.target}\\n`;\n      }\n    });\n    discordMessage += '\\n';\n  }\n  \n  if (high.filter(s => s.confidence >= 75).length > 0) {\n    discordMessage += '**\ud83d\udcca High Priority Signals**\\n';\n    high.filter(s => s.confidence >= 75).forEach(s => {\n      const emoji = s.action === 'buy' ? '\ud83d\udfe2' : s.action === 'sell' ? '\ud83d\udd34' : '\u26aa';\n      discordMessage += `${emoji} ${s.symbol}: ${s.action.toUpperCase()} (${s.confidence}/100)\\n`;\n      discordMessage += `   ${s.reason}\\n`;\n    });\n  }\n  \n  discordMessage += `\\n\u23f0 ${timeStr} PT`;\n}\n\n// Build Obsidian content (all signals)\nconst obsidianLines = [];\nconst now = new Date();\nobsidianLines.push(`# Trading Signals - ${now.toISOString().split('T')[0]}`);\nobsidianLines.push(`\\n**Time:** ${now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })} PT`);\nobsidianLines.push(`\\n**Optimized Parameters Active:** \u2705`);\nobsidianLines.push(`- RSI Oversold: ${optimizedParams.thresholds?.rsi_oversold || 30}`);\nobsidianLines.push(`- RSI Overbought: ${optimizedParams.thresholds?.rsi_overbought || 70}`);\nobsidianLines.push(`- Volume Spike: ${optimizedParams.thresholds?.volume_spike_multiplier || 1.5}x\\n`);\nobsidianLines.push(`## Market Overview\\n${input.market_overview || 'N/A'}\\n`);\n\nif (signals.length > 0) {\n  obsidianLines.push('## Signals\\n');\n  \n  if (critical.length > 0) {\n    obsidianLines.push('### \ud83d\udea8 Critical\\n');\n    critical.forEach(s => {\n      obsidianLines.push(`#### ${s.symbol} - ${s.action.toUpperCase()}`);\n      obsidianLines.push(`- **Confidence:** ${s.confidence}/100`);\n      obsidianLines.push(`- **Urgency:** ${s.urgency || 'critical'}`);\n      obsidianLines.push(`- **Price:** $${s.price || 'N/A'}`);\n      obsidianLines.push(`- **Reason:** ${s.reason}`);\n      if (s.tech_reasons?.length) obsidianLines.push(`- **Technical:** ${s.tech_reasons.join(', ')}`);\n      if (s.key_levels) obsidianLines.push(`- **Levels:** Entry $${s.key_levels.entry}, Stop $${s.key_levels.stop}, Target $${s.key_levels.target}`);\n      obsidianLines.push('');\n    });\n  }\n  \n  if (high.length > 0) {\n    obsidianLines.push('### \ud83d\udcca High Priority\\n');\n    high.forEach(s => {\n      obsidianLines.push(`#### ${s.symbol} - ${s.action.toUpperCase()}`);\n      obsidianLines.push(`- **Confidence:** ${s.confidence}/100`);\n      obsidianLines.push(`- **Price:** $${s.price || 'N/A'}`);\n      obsidianLines.push(`- **Reason:** ${s.reason}`);\n      if (s.tech_reasons?.length) obsidianLines.push(`- **Technical:** ${s.tech_reasons.join(', ')}`);\n      obsidianLines.push('');\n    });\n  }\n  \n  if (medium.length > 0) {\n    obsidianLines.push('### \u26aa Medium Priority\\n');\n    medium.forEach(s => {\n      obsidianLines.push(`- ${s.symbol}: ${s.action.toUpperCase()} (${s.confidence}/100) - ${s.reason}`);\n    });\n    obsidianLines.push('');\n  }\n}\n\nobsidianLines.push('## Recommendations');\nobsidianLines.push(input.recommendations || 'N/A');\nobsidianLines.push('\\n## Risk Assessment');\nobsidianLines.push(input.risk_assessment || 'N/A');\n\nif (optimizedParams.performance_metrics) {\n  obsidianLines.push('\\n## Backtest Performance (Walk-Forward Validated)');\n  obsidianLines.push(`- **Avg Sharpe Ratio:** ${optimizedParams.performance_metrics.avg_sharpe_ratio}`);\n  obsidianLines.push(`- **Avg Total Return:** ${optimizedParams.performance_metrics.avg_total_return}%`);\n  obsidianLines.push(`- **Optimization Date:** ${optimizedParams.performance_metrics.optimization_date}`);\n}\n\n// Truncate to Discord's 2000 char limit\nif (discordMessage.length > 1950) {\n  discordMessage = discordMessage.substring(0, 1940) + '\\n\u2026(truncated)';\n}\n\nreturn [{\n  json: {\n    sendDiscord: discordMessage.length > 0,\n    discordMessage,\n    obsidianContent: obsidianLines.join('\\n'),\n    signals,\n    criticalCount: critical.length,\n    highCount: high.length,\n    mediumCount: medium.length,\n    lowCount: low.length,\n    timestamp,\n    optimizedParams\n  }\n}];"
       },
       "name": "Route Signals",
       "type": "n8n-nodes-base.code",
@@ -250,7 +250,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const input = $('Route Signals').first().json;\nconst signals = input.signals || [];\nif (signals.length === 0) return [{ json: { skip: true } }];\n\nconst newEntries = signals.map(s => ({\n  symbol: s.symbol,\n  action: s.action,\n  confidence: s.confidence,\n  urgency: s.urgency || 'medium',\n  reason: s.reason,\n  tech_reasons: s.tech_reasons || [],\n  price: s.price,\n  timestamp: input.timestamp,\n  outcome: 'pending',\n  key_levels: s.key_levels || null\n}));\n\nreturn [{\n  json: {\n    signals: newEntries,\n    filepath: '/home/ubuntu/.n8n-files/Trading/performance/metrics.json'\n  }\n}];"
+        "jsCode": "const input = $('Route Signals').first().json;\nconst signals = input.signals || [];\n\nconst newEntries = signals.map(s => ({\n  symbol: s.symbol,\n  action: s.action,\n  confidence: s.confidence,\n  urgency: s.urgency || 'medium',\n  reason: s.reason,\n  tech_reasons: s.tech_reasons || [],\n  price: s.price,\n  timestamp: input.timestamp,\n  outcome: 'pending',\n  key_levels: s.key_levels || null\n}));\n\nreturn [{\n  json: {\n    signals: newEntries,\n    filepath: '/home/ubuntu/.n8n-files/Trading/performance/metrics.json'\n  }\n}];"
       },
       "name": "Log Signals",
       "type": "n8n-nodes-base.code",
@@ -279,7 +279,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const newSignals = $('Log Signals').first().json.signals;\nlet metrics = { signals: [], accuracy: { overall: 0, by_type: {} }, last_updated: null };\n\ntry {\n  const binaryData = $input.first().binary?.data?.data;\n  if (binaryData) {\n    metrics = JSON.parse(Buffer.from(binaryData, 'base64').toString('utf-8'));\n  }\n} catch (e) {}\n\nmetrics.signals = [...(metrics.signals || []), ...newSignals];\n\nif (metrics.signals.length > 500) {\n  metrics.signals = metrics.signals.slice(-500);\n}\n\nmetrics.last_updated = new Date().toISOString();\n\nconst metricsJson = JSON.stringify(metrics, null, 2);\nconst binaryContent = Buffer.from(metricsJson).toString('base64');\n\nreturn [{\n  json: {\n    filepath: '/home/ubuntu/.n8n-files/Trading/performance/metrics.json'\n  },\n  binary: {\n    data: {\n      data: binaryContent,\n      mimeType: 'application/json',\n      fileName: 'metrics.json'\n    }\n  }\n}];"
+        "jsCode": "const logSignalsNode = $('Log Signals').first();\nconst newSignals = logSignalsNode?.json?.signals || [];\nlet metrics = { signals: [], accuracy: { overall: 0, by_type: {} }, last_updated: null };\n\ntry {\n  const binaryData = $input.first().binary?.data?.data;\n  if (binaryData) {\n    metrics = JSON.parse(Buffer.from(binaryData, 'base64').toString('utf-8'));\n  }\n} catch (e) {}\n\nmetrics.signals = [...(metrics.signals || []), ...newSignals];\n\nif (metrics.signals.length > 500) {\n  metrics.signals = metrics.signals.slice(-500);\n}\n\nmetrics.last_updated = new Date().toISOString();\n\nconst metricsJson = JSON.stringify(metrics, null, 2);\nconst binaryContent = Buffer.from(metricsJson).toString('base64');\n\nreturn [{\n  json: {\n    filepath: '/home/ubuntu/.n8n-files/Trading/performance/metrics.json'\n  },\n  binary: {\n    data: {\n      data: binaryContent,\n      mimeType: 'application/json',\n      fileName: 'metrics.json'\n    }\n  }\n}];"
       },
       "name": "Append and Save Metrics",
       "type": "n8n-nodes-base.code",
@@ -357,7 +357,7 @@
         ]
       ]
     },
-    "Afternoon Scan 1PM": {
+    "Midday Scan 12PM": {
       "main": [
         [
           {
@@ -530,9 +530,8 @@
   },
   "meta": null,
   "pinData": {},
-  "versionId": "cdaaa355-829d-4fbb-9e09-67bcd08805d1",
-  "activeVersionId": "cdaaa355-829d-4fbb-9e09-67bcd08805d1",
-  "versionCounter": 93,
+  "versionId": "fb4ef20f-7b08-4243-9d54-44f8e502ef04",
+  "activeVersionId": "fb4ef20f-7b08-4243-9d54-44f8e502ef04",
   "triggerCount": 3,
   "shared": [
     {
@@ -540,24 +539,13 @@
       "createdAt": "2026-03-25T15:56:41.144Z",
       "role": "workflow:owner",
       "workflowId": "trading-signals-001",
-      "projectId": "2wMuHrOZ0KpAorzn",
-      "project": {
-        "updatedAt": "2026-03-15T01:06:51.004Z",
-        "createdAt": "2026-03-15T01:05:30.851Z",
-        "id": "2wMuHrOZ0KpAorzn",
-        "name": "monday bot <a3171998@gmail.com>",
-        "type": "personal",
-        "icon": null,
-        "description": null,
-        "creatorId": "dc157584-5741-4a40-a086-70a91678825f"
-      }
+      "projectId": "2wMuHrOZ0KpAorzn"
     }
   ],
-  "tags": [],
   "activeVersion": {
-    "updatedAt": "2026-03-28T03:21:20.842Z",
-    "createdAt": "2026-03-28T03:21:20.842Z",
-    "versionId": "cdaaa355-829d-4fbb-9e09-67bcd08805d1",
+    "updatedAt": "2026-04-05T15:42:35.976Z",
+    "createdAt": "2026-04-05T15:42:35.976Z",
+    "versionId": "fb4ef20f-7b08-4243-9d54-44f8e502ef04",
     "workflowId": "trading-signals-001",
     "nodes": [
       {
@@ -580,12 +568,13 @@
         },
         "name": "Webhook Trigger",
         "type": "n8n-nodes-base.webhook",
-        "typeVersion": 1,
+        "typeVersion": 2,
         "position": [
           -600,
           400
         ],
-        "id": "webhook-trigger"
+        "id": "webhook-trigger",
+        "webhookId": "f7e8a9b2-c3d4-45e6-8f7a-0b1c2d3e4f5a"
       },
       {
         "parameters": {
@@ -803,7 +792,7 @@
       },
       {
         "parameters": {
-          "jsCode": "const input = $('Route Signals').first().json;\nconst signals = input.signals || [];\nif (signals.length === 0) return [{ json: { skip: true } }];\n\nconst newEntries = signals.map(s => ({\n  symbol: s.symbol,\n  action: s.action,\n  confidence: s.confidence,\n  urgency: s.urgency || 'medium',\n  reason: s.reason,\n  tech_reasons: s.tech_reasons || [],\n  price: s.price,\n  timestamp: input.timestamp,\n  outcome: 'pending',\n  key_levels: s.key_levels || null\n}));\n\nreturn [{\n  json: {\n    signals: newEntries,\n    filepath: '/home/ubuntu/.n8n-files/Trading/performance/metrics.json'\n  }\n}];"
+          "jsCode": "const input = $('Route Signals').first().json;\nconst signals = input.signals || [];\n\nconst newEntries = signals.map(s => ({\n  symbol: s.symbol,\n  action: s.action,\n  confidence: s.confidence,\n  urgency: s.urgency || 'medium',\n  reason: s.reason,\n  tech_reasons: s.tech_reasons || [],\n  price: s.price,\n  timestamp: input.timestamp,\n  outcome: 'pending',\n  key_levels: s.key_levels || null\n}));\n\nreturn [{\n  json: {\n    signals: newEntries,\n    filepath: '/home/ubuntu/.n8n-files/Trading/performance/metrics.json'\n  }\n}];"
         },
         "name": "Log Signals",
         "type": "n8n-nodes-base.code",
@@ -832,7 +821,7 @@
       },
       {
         "parameters": {
-          "jsCode": "const newSignals = $('Log Signals').first().json.signals;\nlet metrics = { signals: [], accuracy: { overall: 0, by_type: {} }, last_updated: null };\n\ntry {\n  const binaryData = $input.first().binary?.data?.data;\n  if (binaryData) {\n    metrics = JSON.parse(Buffer.from(binaryData, 'base64').toString('utf-8'));\n  }\n} catch (e) {}\n\nmetrics.signals = [...(metrics.signals || []), ...newSignals];\n\nif (metrics.signals.length > 500) {\n  metrics.signals = metrics.signals.slice(-500);\n}\n\nmetrics.last_updated = new Date().toISOString();\n\nconst metricsJson = JSON.stringify(metrics, null, 2);\nconst binaryContent = Buffer.from(metricsJson).toString('base64');\n\nreturn [{\n  json: {\n    filepath: '/home/ubuntu/.n8n-files/Trading/performance/metrics.json'\n  },\n  binary: {\n    data: {\n      data: binaryContent,\n      mimeType: 'application/json',\n      fileName: 'metrics.json'\n    }\n  }\n}];"
+          "jsCode": "const logSignalsNode = $('Log Signals').first();\nconst newSignals = logSignalsNode?.json?.signals || [];\nlet metrics = { signals: [], accuracy: { overall: 0, by_type: {} }, last_updated: null };\n\ntry {\n  const binaryData = $input.first().binary?.data?.data;\n  if (binaryData) {\n    metrics = JSON.parse(Buffer.from(binaryData, 'base64').toString('utf-8'));\n  }\n} catch (e) {}\n\nmetrics.signals = [...(metrics.signals || []), ...newSignals];\n\nif (metrics.signals.length > 500) {\n  metrics.signals = metrics.signals.slice(-500);\n}\n\nmetrics.last_updated = new Date().toISOString();\n\nconst metricsJson = JSON.stringify(metrics, null, 2);\nconst binaryContent = Buffer.from(metricsJson).toString('base64');\n\nreturn [{\n  json: {\n    filepath: '/home/ubuntu/.n8n-files/Trading/performance/metrics.json'\n  },\n  binary: {\n    data: {\n      data: binaryContent,\n      mimeType: 'application/json',\n      fileName: 'metrics.json'\n    }\n  }\n}];"
         },
         "name": "Append and Save Metrics",
         "type": "n8n-nodes-base.code",
@@ -910,7 +899,7 @@
           ]
         ]
       },
-      "Afternoon Scan 1PM": {
+      "Midday Scan 12PM": {
         "main": [
           [
             {
@@ -1067,48 +1056,7 @@
     "authors": "monday bot",
     "name": null,
     "description": null,
-    "autosaved": false,
-    "workflowPublishHistory": [
-      {
-        "createdAt": "2026-03-28T03:21:20.933Z",
-        "id": 161,
-        "workflowId": "trading-signals-001",
-        "versionId": "cdaaa355-829d-4fbb-9e09-67bcd08805d1",
-        "event": "activated",
-        "userId": "dc157584-5741-4a40-a086-70a91678825f"
-      },
-      {
-        "createdAt": "2026-04-02T00:42:13.594Z",
-        "id": 186,
-        "workflowId": "trading-signals-001",
-        "versionId": "cdaaa355-829d-4fbb-9e09-67bcd08805d1",
-        "event": "activated",
-        "userId": "dc157584-5741-4a40-a086-70a91678825f"
-      },
-      {
-        "createdAt": "2026-03-28T03:21:20.888Z",
-        "id": 160,
-        "workflowId": "trading-signals-001",
-        "versionId": "cdaaa355-829d-4fbb-9e09-67bcd08805d1",
-        "event": "deactivated",
-        "userId": "dc157584-5741-4a40-a086-70a91678825f"
-      },
-      {
-        "createdAt": "2026-03-31T03:21:35.643Z",
-        "id": 169,
-        "workflowId": "trading-signals-001",
-        "versionId": "cdaaa355-829d-4fbb-9e09-67bcd08805d1",
-        "event": "deactivated",
-        "userId": "dc157584-5741-4a40-a086-70a91678825f"
-      },
-      {
-        "createdAt": "2026-04-02T00:42:13.573Z",
-        "id": 185,
-        "workflowId": "trading-signals-001",
-        "versionId": "cdaaa355-829d-4fbb-9e09-67bcd08805d1",
-        "event": "deactivated",
-        "userId": "dc157584-5741-4a40-a086-70a91678825f"
-      }
-    ]
-  }
+    "autosaved": false
+  },
+  "tags": []
 }

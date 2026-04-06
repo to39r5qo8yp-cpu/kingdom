@@ -1,9 +1,8 @@
 {
-  "updatedAt": "2026-04-02T21:59:35.194Z",
+  "updatedAt": "2026-04-04T05:01:56.320Z",
   "createdAt": "2026-04-02T21:59:35.194Z",
   "id": "ruZFL3bOqTU2pTR8",
-  "name": "Send File to User DM",
-  "description": null,
+  "name": "Notification File DM",
   "active": false,
   "isArchived": false,
   "nodes": [
@@ -108,7 +107,6 @@
   "pinData": null,
   "versionId": "0863c227-4492-4630-bbfa-8c43c2992b3c",
   "activeVersionId": null,
-  "versionCounter": 1,
   "triggerCount": 0,
   "shared": [
     {
@@ -116,19 +114,9 @@
       "createdAt": "2026-04-02T21:59:35.200Z",
       "role": "workflow:owner",
       "workflowId": "ruZFL3bOqTU2pTR8",
-      "projectId": "2wMuHrOZ0KpAorzn",
-      "project": {
-        "updatedAt": "2026-03-15T01:06:51.004Z",
-        "createdAt": "2026-03-15T01:05:30.851Z",
-        "id": "2wMuHrOZ0KpAorzn",
-        "name": "monday bot <a3171998@gmail.com>",
-        "type": "personal",
-        "icon": null,
-        "description": null,
-        "creatorId": "dc157584-5741-4a40-a086-70a91678825f"
-      }
+      "projectId": "2wMuHrOZ0KpAorzn"
     }
   ],
-  "tags": [],
-  "activeVersion": null
+  "activeVersion": null,
+  "tags": []
 }

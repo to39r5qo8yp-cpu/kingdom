@@ -1,9 +1,8 @@
 {
-  "updatedAt": "2026-04-02T00:42:12.103Z",
+  "updatedAt": "2026-04-04T20:55:09.875Z",
   "createdAt": "2026-03-15T03:30:23.069Z",
   "id": "5c2b7cff-fda0-47c0-a27c-06493fa75526",
-  "name": "Email Monitor with AI Categorization",
-  "description": null,
+  "name": "Email Monitor AI",
   "active": true,
   "isArchived": false,
   "nodes": [
@@ -101,7 +100,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const item = $input.first().json;\n\nconst subject = item.subject || item.Subject || '(no subject)';\nconst from    = item.from?.value?.[0]?.address || item.from || item.From || 'unknown';\nconst body    = item.text || item.snippet || item.body || '';\nconst trimmedBody = body.substring(0, 2000);\n\n// Build chatInput \u2014 this is what the LangChain AI Agent node reads as the user message\nconst chatInput = `Analyze this email:\n\nFrom: ${from}\nSubject: ${subject}\n\nBody:\n${trimmedBody}`;\n\nreturn [{ json: { subject, from, body: trimmedBody, chatInput } }];"
+        "jsCode": "const item = $input.first().json;\n\nconst subject = item.subject || item.Subject || '(no subject)';\nconst from    = item.from?.value?.[0]?.address || item.from || item.From || 'unknown';\nconst body    = item.text || item.snippet || item.body || '';\nconst date    = item.date || item.Date || new Date().toISOString();\nconst uid     = item.uid || item.id || item.messageId || '';\n\n// Parse date for display\nconst emailDate = new Date(date);\nconst timestamp = emailDate.toLocaleString('en-US', {\n  month: 'short', day: 'numeric',\n  hour: '2-digit', minute: '2-digit'\n});\n\nconst trimmedBody = body.substring(0, 2000);\n\n// Build chatInput with timestamp context\nconst chatInput = `Analyze this email:\n\nFrom: ${from}\nSubject: ${subject}\nDate: ${date}\n\nBody:\n${trimmedBody}`;\n\nreturn [{ json: { subject, from, body: trimmedBody, chatInput, timestamp, uid } }];"
       },
       "name": "Prepare Email Data",
       "type": "n8n-nodes-base.code",
@@ -133,7 +132,8 @@
       "parameters": {
         "options": {
           "temperature": 0.1
-        }
+        },
+        "model": "llama3.2"
       },
       "name": "Ollama Chat Model",
       "type": "@n8n/n8n-nodes-langchain.lmChatOllama",
@@ -152,7 +152,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const raw = $json.output || $json.text || '{}';\nlet parsed = {};\ntry {\n  const match = raw.match(/\\{[\\s\\S]*\\}/);\n  parsed = JSON.parse(match ? match[0] : raw);\n} catch (e) {\n  parsed = { category: 'GENERAL', summary: raw.substring(0, 200), priority: 'low' };\n}\n\nconst validCategories = ['URGENT', 'MEETING', 'FINANCE', 'SHIPPING', 'SHIPPED', 'NEWSLETTER', 'SPAM', 'GENERAL'];\nconst category = validCategories.includes(parsed.category) ? parsed.category : 'GENERAL';\nconst skipCategories = ['NEWSLETTER'];\n\nif (skipCategories.includes(category)) return [];\n\n// Get from/subject from the Prepare Email Data node (AI Agent doesn't pass them through)\nconst emailData = $('Prepare Email Data').first().json;\n\nreturn [{ json: {\n  from:            emailData.from || 'unknown',\n  subject:         emailData.subject || '',\n  category,\n  summary:         parsed.summary || '',\n  priority:        parsed.priority || 'low',\n  item:            parsed.item             || null,\n  quantity:        parsed.quantity         || null,\n  tracking_number: parsed.tracking_number  || null,\n  order_number:    parsed.order_number     || null\n}}];"
+        "jsCode": "const raw = $json.output || $json.text || '{}';\nlet parsed = {};\n\n// Try to parse AI response\ntry {\n  const match = raw.match(/\\{[\\s\\S]*\\}/);\n  parsed = JSON.parse(match ? match[0] : raw);\n} catch (e) {\n  // On parse failure, default to GENERAL with note\n  parsed = {\n    category: 'GENERAL',\n    summary: '(AI parse failed) ' + raw.substring(0, 100),\n    priority: 'low',\n    parseError: true\n  };\n}\n\nconst validCategories = ['URGENT', 'MEETING', 'FINANCE', 'SHIPPING', 'SHIPPED', 'NEWSLETTER', 'SPAM', 'GENERAL'];\nconst category = validCategories.includes(parsed.category) ? parsed.category : 'GENERAL';\nconst skipCategories = ['NEWSLETTER'];\n\nif (skipCategories.includes(category)) return [];\n\n// Get context from Prepare Email Data node\nconst emailData = $('Prepare Email Data').first().json;\n\nreturn [{ json: {\n  from:            emailData.from || 'unknown',\n  subject:         emailData.subject || '',\n  timestamp:       emailData.timestamp || '',\n  uid:             emailData.uid || '',\n  category,\n  summary:         parsed.summary || '',\n  priority:        parsed.priority || 'low',\n  parseError:      parsed.parseError || false,\n  item:            parsed.item || null,\n  quantity:        parsed.quantity || null,\n  tracking_number: parsed.tracking_number || null,\n  order_number:    parsed.order_number || null\n}}];"
       },
       "name": "Parse AI Response",
       "type": "n8n-nodes-base.code",
@@ -202,7 +202,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const { from, subject, summary, priority } = $json;\nconst priorityIcon = priority === 'high' ? '\ud83d\udd34' : '\ud83d\udfe1';\nreturn [{ json: { message: `\ud83d\udea8 **URGENT** ${priorityIcon} ${priority.toUpperCase()}\\n**From:** ${from}\\n**Subject:** ${subject}\\n**Summary:** ${summary}` } }];"
+        "jsCode": "const { from, subject, summary, priority, timestamp, parseError } = $json;\nconst priorityIcon = priority === 'high' ? '\ud83d\udd34' : priority === 'medium' ? '\ud83d\udfe1' : '\ud83d\udfe2';\nconst errorNote = parseError ? ' \u26a0\ufe0f *AI parse failed*' : '';\nreturn [{ json: { message: `\ud83d\udea8 **URGENT** ${priorityIcon} ${priority.toUpperCase()}${errorNote}\n**From:** ${from}\n**Time:** ${timestamp}\n**Subject:** ${subject}\n**Summary:** ${summary}` } }];"
       },
       "name": "Format Urgent",
       "type": "n8n-nodes-base.code",
@@ -245,7 +245,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const { from, subject, summary } = $json;\nreturn [{ json: { message: `\ud83d\udcc5 **MEETING** \u2014 Calendar Request\\n**From:** ${from}\\n**Subject:** ${subject}\\n**Summary:** ${summary}` } }];"
+        "jsCode": "const { from, subject, summary, priority, timestamp } = $json;\nreturn [{ json: { message: `\ud83d\udcc5 **MEETING**\n**From:** ${from}\n**Time:** ${timestamp}\n**Subject:** ${subject}\n**Summary:** ${summary}` } }];"
       },
       "name": "Format Meeting",
       "type": "n8n-nodes-base.code",
@@ -288,7 +288,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const { from, subject, summary } = $json;\nreturn [{ json: { message: `\ud83d\udcb0 **FINANCE** \u2014 Transaction/Invoice\\n**From:** ${from}\\n**Subject:** ${subject}\\n**Summary:** ${summary}` } }];"
+        "jsCode": "const { from, subject, summary, timestamp } = $json;\nreturn [{ json: { message: `\ud83d\udcb0 **FINANCE** \u2014 Transaction/Invoice\n**From:** ${from}\n**Time:** ${timestamp}\n**Subject:** ${subject}\n**Summary:** ${summary}` } }];"
       },
       "name": "Format Finance",
       "type": "n8n-nodes-base.code",
@@ -331,7 +331,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const { from, subject, summary } = $json;\nreturn [{ json: { message: `\ud83d\udce6 **SHIPPING** \u2014 Delivery Update\\n**From:** ${from}\\n**Subject:** ${subject}\\n**Summary:** ${summary}` } }];"
+        "jsCode": "const { from, subject, summary, timestamp } = $json;\nreturn [{ json: { message: `\ud83d\udce6 **SHIPPING** \u2014 Delivery Update\n**From:** ${from}\n**Time:** ${timestamp}\n**Subject:** ${subject}\n**Summary:** ${summary}` } }];"
       },
       "name": "Format Shipping",
       "type": "n8n-nodes-base.code",
@@ -374,7 +374,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const { from, subject, item, quantity, tracking_number, order_number } = $json;\nconst trackingLine = tracking_number ? `\\n**Tracking:** ${tracking_number}` : '';\nconst orderLine    = order_number    ? `\\n**Order #:** ${order_number}`    : '';\nconst qtyLine      = quantity        ? ` x${quantity}`                     : '';\nreturn [{ json: { message: `\ud83d\ude9a **SHIPPED** \u2014 Order Dispatched\\n**From:** ${from}\\n**Subject:** ${subject}\\n**Item:** ${item || 'unknown'}${qtyLine}${orderLine}${trackingLine}` } }];"
+        "jsCode": "const { from, subject, item, quantity, tracking_number, order_number, timestamp } = $json;\nconst trackingLine = tracking_number ? `\\n**Tracking:** ${tracking_number}` : '';\nconst orderLine    = order_number    ? `\\n**Order #:** ${order_number}`    : '';\nconst qtyLine      = quantity        ? ` x${quantity}`                     : '';\nreturn [{ json: { message: `\ud83d\ude9a **SHIPPED** \u2014 Order Dispatched\n**From:** ${from}\n**Time:** ${timestamp}\n**Item:** ${item || 'unknown'}${qtyLine}${orderLine}${trackingLine}` } }];"
       },
       "name": "Format Shipped",
       "type": "n8n-nodes-base.code",
@@ -417,7 +417,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const { from, subject, summary } = $json;\nreturn [{ json: { message: `\ud83d\udeab **SPAM/ADS** \u2014 Flagged Email\\n**From:** ${from}\\n**Subject:** ${subject}\\n**Summary:** ${summary}` } }];"
+        "jsCode": "const { from, subject, summary, timestamp } = $json;\nreturn [{ json: { message: `\ud83d\udeab **SPAM/ADS** \u2014 Flagged Email\n**From:** ${from}\n**Time:** ${timestamp}\n**Subject:** ${subject}\n**Summary:** ${summary}` } }];"
       },
       "name": "Format Spam",
       "type": "n8n-nodes-base.code",
@@ -460,7 +460,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const { from, subject, summary, category } = $json;\nreturn [{ json: { message: `\ud83d\udce7 **${category}**\\n**From:** ${from}\\n**Subject:** ${subject}\\n**Summary:** ${summary}` } }];"
+        "jsCode": "const { from, subject, summary, category, timestamp } = $json;\nreturn [{ json: { message: `\ud83d\udce7 **${category}**\n**From:** ${from}\n**Time:** ${timestamp}\n**Subject:** ${subject}\n**Summary:** ${summary}` } }];"
       },
       "name": "Format General",
       "type": "n8n-nodes-base.code",
@@ -500,6 +500,21 @@
           "name": "Discord Bot account"
         }
       }
+    },
+    {
+      "parameters": {
+        "operation": "removeItemsSeenInPreviousExecutions",
+        "dedupeValue": "={{ $json.uid || $json.id || $json.messageId }}",
+        "logic": "removeItemsWithAlreadySeenKeyValues"
+      },
+      "name": "Deduplicate Emails",
+      "type": "n8n-nodes-base.removeDuplicates",
+      "typeVersion": 2,
+      "position": [
+        80,
+        -16
+      ],
+      "id": "dedupe-emails-node"
     }
   ],
   "connections": {
@@ -540,7 +555,7 @@
       "main": [
         [
           {
-            "node": "Prepare Email Data",
+            "node": "Deduplicate Emails",
             "type": "main",
             "index": 0
           }
@@ -720,6 +735,17 @@
           }
         ]
       ]
+    },
+    "Deduplicate Emails": {
+      "main": [
+        [
+          {
+            "node": "Prepare Email Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "settings": {
@@ -733,9 +759,8 @@
     "templateCredsSetupCompleted": true
   },
   "pinData": {},
-  "versionId": "d3160d01-ff8d-42a8-96fa-8dfb11116014",
-  "activeVersionId": "d3160d01-ff8d-42a8-96fa-8dfb11116014",
-  "versionCounter": 445,
+  "versionId": "776ed022-9441-4632-972f-30189a815900",
+  "activeVersionId": "776ed022-9441-4632-972f-30189a815900",
   "triggerCount": 1,
   "shared": [
     {
@@ -743,24 +768,13 @@
       "createdAt": "2026-03-15T03:30:23.073Z",
       "role": "workflow:owner",
       "workflowId": "5c2b7cff-fda0-47c0-a27c-06493fa75526",
-      "projectId": "2wMuHrOZ0KpAorzn",
-      "project": {
-        "updatedAt": "2026-03-15T01:06:51.004Z",
-        "createdAt": "2026-03-15T01:05:30.851Z",
-        "id": "2wMuHrOZ0KpAorzn",
-        "name": "monday bot <a3171998@gmail.com>",
-        "type": "personal",
-        "icon": null,
-        "description": null,
-        "creatorId": "dc157584-5741-4a40-a086-70a91678825f"
-      }
+      "projectId": "2wMuHrOZ0KpAorzn"
     }
   ],
-  "tags": [],
   "activeVersion": {
-    "updatedAt": "2026-03-25T14:17:06.000Z",
-    "createdAt": "2026-03-24T19:49:33.142Z",
-    "versionId": "d3160d01-ff8d-42a8-96fa-8dfb11116014",
+    "updatedAt": "2026-04-04T20:55:09.882Z",
+    "createdAt": "2026-04-04T20:55:09.882Z",
+    "versionId": "776ed022-9441-4632-972f-30189a815900",
     "workflowId": "5c2b7cff-fda0-47c0-a27c-06493fa75526",
     "nodes": [
       {
@@ -857,7 +871,7 @@
       },
       {
         "parameters": {
-          "jsCode": "const item = $input.first().json;\n\nconst subject = item.subject || item.Subject || '(no subject)';\nconst from    = item.from?.value?.[0]?.address || item.from || item.From || 'unknown';\nconst body    = item.text || item.snippet || item.body || '';\nconst trimmedBody = body.substring(0, 2000);\n\n// Build chatInput \u2014 this is what the LangChain AI Agent node reads as the user message\nconst chatInput = `Analyze this email:\n\nFrom: ${from}\nSubject: ${subject}\n\nBody:\n${trimmedBody}`;\n\nreturn [{ json: { subject, from, body: trimmedBody, chatInput } }];"
+          "jsCode": "const item = $input.first().json;\n\nconst subject = item.subject || item.Subject || '(no subject)';\nconst from    = item.from?.value?.[0]?.address || item.from || item.From || 'unknown';\nconst body    = item.text || item.snippet || item.body || '';\nconst date    = item.date || item.Date || new Date().toISOString();\nconst uid     = item.uid || item.id || item.messageId || '';\n\n// Parse date for display\nconst emailDate = new Date(date);\nconst timestamp = emailDate.toLocaleString('en-US', {\n  month: 'short', day: 'numeric',\n  hour: '2-digit', minute: '2-digit'\n});\n\nconst trimmedBody = body.substring(0, 2000);\n\n// Build chatInput with timestamp context\nconst chatInput = `Analyze this email:\n\nFrom: ${from}\nSubject: ${subject}\nDate: ${date}\n\nBody:\n${trimmedBody}`;\n\nreturn [{ json: { subject, from, body: trimmedBody, chatInput, timestamp, uid } }];"
         },
         "name": "Prepare Email Data",
         "type": "n8n-nodes-base.code",
@@ -889,7 +903,8 @@
         "parameters": {
           "options": {
             "temperature": 0.1
-          }
+          },
+          "model": "llama3.2"
         },
         "name": "Ollama Chat Model",
         "type": "@n8n/n8n-nodes-langchain.lmChatOllama",
@@ -908,7 +923,7 @@
       },
       {
         "parameters": {
-          "jsCode": "const raw = $json.output || $json.text || '{}';\nlet parsed = {};\ntry {\n  const match = raw.match(/\\{[\\s\\S]*\\}/);\n  parsed = JSON.parse(match ? match[0] : raw);\n} catch (e) {\n  parsed = { category: 'GENERAL', summary: raw.substring(0, 200), priority: 'low' };\n}\n\nconst validCategories = ['URGENT', 'MEETING', 'FINANCE', 'SHIPPING', 'SHIPPED', 'NEWSLETTER', 'SPAM', 'GENERAL'];\nconst category = validCategories.includes(parsed.category) ? parsed.category : 'GENERAL';\nconst skipCategories = ['NEWSLETTER'];\n\nif (skipCategories.includes(category)) return [];\n\n// Get from/subject from the Prepare Email Data node (AI Agent doesn't pass them through)\nconst emailData = $('Prepare Email Data').first().json;\n\nreturn [{ json: {\n  from:            emailData.from || 'unknown',\n  subject:         emailData.subject || '',\n  category,\n  summary:         parsed.summary || '',\n  priority:        parsed.priority || 'low',\n  item:            parsed.item             || null,\n  quantity:        parsed.quantity         || null,\n  tracking_number: parsed.tracking_number  || null,\n  order_number:    parsed.order_number     || null\n}}];"
+          "jsCode": "const raw = $json.output || $json.text || '{}';\nlet parsed = {};\n\n// Try to parse AI response\ntry {\n  const match = raw.match(/\\{[\\s\\S]*\\}/);\n  parsed = JSON.parse(match ? match[0] : raw);\n} catch (e) {\n  // On parse failure, default to GENERAL with note\n  parsed = {\n    category: 'GENERAL',\n    summary: '(AI parse failed) ' + raw.substring(0, 100),\n    priority: 'low',\n    parseError: true\n  };\n}\n\nconst validCategories = ['URGENT', 'MEETING', 'FINANCE', 'SHIPPING', 'SHIPPED', 'NEWSLETTER', 'SPAM', 'GENERAL'];\nconst category = validCategories.includes(parsed.category) ? parsed.category : 'GENERAL';\nconst skipCategories = ['NEWSLETTER'];\n\nif (skipCategories.includes(category)) return [];\n\n// Get context from Prepare Email Data node\nconst emailData = $('Prepare Email Data').first().json;\n\nreturn [{ json: {\n  from:            emailData.from || 'unknown',\n  subject:         emailData.subject || '',\n  timestamp:       emailData.timestamp || '',\n  uid:             emailData.uid || '',\n  category,\n  summary:         parsed.summary || '',\n  priority:        parsed.priority || 'low',\n  parseError:      parsed.parseError || false,\n  item:            parsed.item || null,\n  quantity:        parsed.quantity || null,\n  tracking_number: parsed.tracking_number || null,\n  order_number:    parsed.order_number || null\n}}];"
         },
         "name": "Parse AI Response",
         "type": "n8n-nodes-base.code",
@@ -945,7 +960,7 @@
               }
             ]
           },
-          "fallbackOutput": 6
+          "fallbackOutput": "extra"
         },
         "name": "Category Router",
         "type": "n8n-nodes-base.switch",
@@ -958,7 +973,7 @@
       },
       {
         "parameters": {
-          "jsCode": "const { from, subject, summary, priority } = $json;\nconst priorityIcon = priority === 'high' ? '\ud83d\udd34' : '\ud83d\udfe1';\nreturn [{ json: { message: `\ud83d\udea8 **URGENT** ${priorityIcon} ${priority.toUpperCase()}\\n**From:** ${from}\\n**Subject:** ${subject}\\n**Summary:** ${summary}` } }];"
+          "jsCode": "const { from, subject, summary, priority, timestamp, parseError } = $json;\nconst priorityIcon = priority === 'high' ? '\ud83d\udd34' : priority === 'medium' ? '\ud83d\udfe1' : '\ud83d\udfe2';\nconst errorNote = parseError ? ' \u26a0\ufe0f *AI parse failed*' : '';\nreturn [{ json: { message: `\ud83d\udea8 **URGENT** ${priorityIcon} ${priority.toUpperCase()}${errorNote}\n**From:** ${from}\n**Time:** ${timestamp}\n**Subject:** ${subject}\n**Summary:** ${summary}` } }];"
         },
         "name": "Format Urgent",
         "type": "n8n-nodes-base.code",
@@ -1001,7 +1016,7 @@
       },
       {
         "parameters": {
-          "jsCode": "const { from, subject, summary } = $json;\nreturn [{ json: { message: `\ud83d\udcc5 **MEETING** \u2014 Calendar Request\\n**From:** ${from}\\n**Subject:** ${subject}\\n**Summary:** ${summary}` } }];"
+          "jsCode": "const { from, subject, summary, priority, timestamp } = $json;\nreturn [{ json: { message: `\ud83d\udcc5 **MEETING**\n**From:** ${from}\n**Time:** ${timestamp}\n**Subject:** ${subject}\n**Summary:** ${summary}` } }];"
         },
         "name": "Format Meeting",
         "type": "n8n-nodes-base.code",
@@ -1044,7 +1059,7 @@
       },
       {
         "parameters": {
-          "jsCode": "const { from, subject, summary } = $json;\nreturn [{ json: { message: `\ud83d\udcb0 **FINANCE** \u2014 Transaction/Invoice\\n**From:** ${from}\\n**Subject:** ${subject}\\n**Summary:** ${summary}` } }];"
+          "jsCode": "const { from, subject, summary, timestamp } = $json;\nreturn [{ json: { message: `\ud83d\udcb0 **FINANCE** \u2014 Transaction/Invoice\n**From:** ${from}\n**Time:** ${timestamp}\n**Subject:** ${subject}\n**Summary:** ${summary}` } }];"
         },
         "name": "Format Finance",
         "type": "n8n-nodes-base.code",
@@ -1087,7 +1102,7 @@
       },
       {
         "parameters": {
-          "jsCode": "const { from, subject, summary } = $json;\nreturn [{ json: { message: `\ud83d\udce6 **SHIPPING** \u2014 Delivery Update\\n**From:** ${from}\\n**Subject:** ${subject}\\n**Summary:** ${summary}` } }];"
+          "jsCode": "const { from, subject, summary, timestamp } = $json;\nreturn [{ json: { message: `\ud83d\udce6 **SHIPPING** \u2014 Delivery Update\n**From:** ${from}\n**Time:** ${timestamp}\n**Subject:** ${subject}\n**Summary:** ${summary}` } }];"
         },
         "name": "Format Shipping",
         "type": "n8n-nodes-base.code",
@@ -1130,7 +1145,7 @@
       },
       {
         "parameters": {
-          "jsCode": "const { from, subject, item, quantity, tracking_number, order_number } = $json;\nconst trackingLine = tracking_number ? `\\n**Tracking:** ${tracking_number}` : '';\nconst orderLine    = order_number    ? `\\n**Order #:** ${order_number}`    : '';\nconst qtyLine      = quantity        ? ` x${quantity}`                     : '';\nreturn [{ json: { message: `\ud83d\ude9a **SHIPPED** \u2014 Order Dispatched\\n**From:** ${from}\\n**Subject:** ${subject}\\n**Item:** ${item || 'unknown'}${qtyLine}${orderLine}${trackingLine}` } }];"
+          "jsCode": "const { from, subject, item, quantity, tracking_number, order_number, timestamp } = $json;\nconst trackingLine = tracking_number ? `\\n**Tracking:** ${tracking_number}` : '';\nconst orderLine    = order_number    ? `\\n**Order #:** ${order_number}`    : '';\nconst qtyLine      = quantity        ? ` x${quantity}`                     : '';\nreturn [{ json: { message: `\ud83d\ude9a **SHIPPED** \u2014 Order Dispatched\n**From:** ${from}\n**Time:** ${timestamp}\n**Item:** ${item || 'unknown'}${qtyLine}${orderLine}${trackingLine}` } }];"
         },
         "name": "Format Shipped",
         "type": "n8n-nodes-base.code",
@@ -1173,7 +1188,7 @@
       },
       {
         "parameters": {
-          "jsCode": "const { from, subject, summary } = $json;\nreturn [{ json: { message: `\ud83d\udeab **SPAM/ADS** \u2014 Flagged Email\\n**From:** ${from}\\n**Subject:** ${subject}\\n**Summary:** ${summary}` } }];"
+          "jsCode": "const { from, subject, summary, timestamp } = $json;\nreturn [{ json: { message: `\ud83d\udeab **SPAM/ADS** \u2014 Flagged Email\n**From:** ${from}\n**Time:** ${timestamp}\n**Subject:** ${subject}\n**Summary:** ${summary}` } }];"
         },
         "name": "Format Spam",
         "type": "n8n-nodes-base.code",
@@ -1216,7 +1231,7 @@
       },
       {
         "parameters": {
-          "jsCode": "const { from, subject, summary, category } = $json;\nreturn [{ json: { message: `\ud83d\udce7 **${category}**\\n**From:** ${from}\\n**Subject:** ${subject}\\n**Summary:** ${summary}` } }];"
+          "jsCode": "const { from, subject, summary, category, timestamp } = $json;\nreturn [{ json: { message: `\ud83d\udce7 **${category}**\n**From:** ${from}\n**Time:** ${timestamp}\n**Subject:** ${subject}\n**Summary:** ${summary}` } }];"
         },
         "name": "Format General",
         "type": "n8n-nodes-base.code",
@@ -1256,6 +1271,21 @@
             "name": "Discord Bot account"
           }
         }
+      },
+      {
+        "parameters": {
+          "operation": "removeItemsSeenInPreviousExecutions",
+          "dedupeValue": "={{ $json.uid || $json.id || $json.messageId }}",
+          "logic": "removeItemsWithAlreadySeenKeyValues"
+        },
+        "name": "Deduplicate Emails",
+        "type": "n8n-nodes-base.removeDuplicates",
+        "typeVersion": 2,
+        "position": [
+          80,
+          -16
+        ],
+        "id": "dedupe-emails-node"
       }
     ],
     "connections": {
@@ -1296,7 +1326,7 @@
         "main": [
           [
             {
-              "node": "Prepare Email Data",
+              "node": "Deduplicate Emails",
               "type": "main",
               "index": 0
             }
@@ -1476,37 +1506,23 @@
             }
           ]
         ]
+      },
+      "Deduplicate Emails": {
+        "main": [
+          [
+            {
+              "node": "Prepare Email Data",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       }
     },
-    "authors": "import",
-    "name": "Version d3160d01",
-    "description": "",
-    "autosaved": false,
-    "workflowPublishHistory": [
-      {
-        "createdAt": "2026-03-25T14:17:06.843Z",
-        "id": 79,
-        "workflowId": "5c2b7cff-fda0-47c0-a27c-06493fa75526",
-        "versionId": "d3160d01-ff8d-42a8-96fa-8dfb11116014",
-        "event": "activated",
-        "userId": "dc157584-5741-4a40-a086-70a91678825f"
-      },
-      {
-        "createdAt": "2026-04-02T00:42:12.950Z",
-        "id": 176,
-        "workflowId": "5c2b7cff-fda0-47c0-a27c-06493fa75526",
-        "versionId": "d3160d01-ff8d-42a8-96fa-8dfb11116014",
-        "event": "activated",
-        "userId": "dc157584-5741-4a40-a086-70a91678825f"
-      },
-      {
-        "createdAt": "2026-04-02T00:42:12.268Z",
-        "id": 175,
-        "workflowId": "5c2b7cff-fda0-47c0-a27c-06493fa75526",
-        "versionId": "d3160d01-ff8d-42a8-96fa-8dfb11116014",
-        "event": "deactivated",
-        "userId": "dc157584-5741-4a40-a086-70a91678825f"
-      }
-    ]
-  }
+    "authors": "monday bot",
+    "name": null,
+    "description": null,
+    "autosaved": false
+  },
+  "tags": []
 }

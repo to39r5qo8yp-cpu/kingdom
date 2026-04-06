@@ -1,0 +1,225 @@
+{
+  "updatedAt": "2026-04-04T05:01:55.968Z",
+  "createdAt": "2026-04-04T02:14:55.073Z",
+  "id": "ue6EeVgIW0rWD3ce",
+  "name": "Memory Consolidator",
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9 * * *"
+            }
+          ]
+        }
+      },
+      "name": "Daily 2AM PDT",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "pythonNative",
+        "pythonCode": "import subprocess\nimport json\nimport sys\nfrom pathlib import Path\nfrom datetime import datetime, timedelta\n\nscript_path = Path.home() / \".openclaw\" / \"workspace\" / \"scripts\" / \"memory-consolidator.py\"\nresult = subprocess.run([sys.executable, str(script_path)], capture_output=True, text=True)\noutput = result.stdout or \"\"\nlines = output.strip().split(\"\\n\") if output else []\nsummary_lines = [line.strip() for line in lines if \"Processing:\" in line or \"Archived:\" in line or \"updated\" in line.lower()]\ndate_str = (datetime.now() - timedelta(days=1)).strftime(\"%Y-%m-%d\")\nreturn {\"date\": date_str, \"success\": result.returncode == 0, \"files_archived\": sum(1 for l in lines if \"Archived:\" in l), \"insights_extracted\": \"Research summaries:\" in output, \"summary\": \"\\n\".join(summary_lines[-5:]) if summary_lines else \"Consolidation complete\"}"
+      },
+      "name": "Run Consolidator",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ]
+    },
+    {
+      "id": "c3d4e5f6-a7b8-9012-cdef-123456789012",
+      "parameters": {
+        "authentication": "botToken",
+        "resource": "message",
+        "operation": "send",
+        "guildId": {
+          "mode": "id",
+          "value": "1204113877139198042"
+        },
+        "channelId": {
+          "mode": "id",
+          "value": "1468408934904889572"
+        },
+        "content": "={{ \"\ud83d\udcca **Memory Consolidator**\\n\\n\" + \"\ud83d\udcc5 \" + $json.date + \"\\n\\n\" + \"\u2705 Files archived: \" + String($json.files_archived) + \"\\n\" + \"\ud83d\udcdd Insights: \" + ($json.insights_extracted ? \"Extracted\" : \"None\") + \"\\n\\n\" + ($json.summary || \"Complete\") }}"
+      },
+      "name": "Discord Summary",
+      "type": "n8n-nodes-base.discord",
+      "typeVersion": 2,
+      "position": [
+        440,
+        0
+      ],
+      "credentials": {
+        "discordBotApi": {
+          "id": "ZDMFOE75AzwAAVO3",
+          "name": "Discord Bot account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Daily 2AM PDT": {
+      "main": [
+        [
+          {
+            "node": "Run Consolidator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Consolidator": {
+      "main": [
+        [
+          {
+            "node": "Discord Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "staticData": {
+    "node:Daily 2AM PDT": {
+      "recurrenceRules": []
+    }
+  },
+  "meta": null,
+  "pinData": null,
+  "versionId": "2e59372d-248b-4485-bcee-c400dea0cbe2",
+  "activeVersionId": "2e59372d-248b-4485-bcee-c400dea0cbe2",
+  "triggerCount": 1,
+  "shared": [
+    {
+      "updatedAt": "2026-04-04T02:14:55.076Z",
+      "createdAt": "2026-04-04T02:14:55.076Z",
+      "role": "workflow:owner",
+      "workflowId": "ue6EeVgIW0rWD3ce",
+      "projectId": "2wMuHrOZ0KpAorzn"
+    }
+  ],
+  "activeVersion": {
+    "updatedAt": "2026-04-04T05:01:55.969Z",
+    "createdAt": "2026-04-04T05:01:55.969Z",
+    "versionId": "2e59372d-248b-4485-bcee-c400dea0cbe2",
+    "workflowId": "ue6EeVgIW0rWD3ce",
+    "nodes": [
+      {
+        "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "cronExpression",
+                "expression": "0 9 * * *"
+              }
+            ]
+          }
+        },
+        "name": "Daily 2AM PDT",
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.3,
+        "position": [
+          0,
+          0
+        ]
+      },
+      {
+        "id": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "language": "pythonNative",
+          "pythonCode": "import subprocess\nimport json\nimport sys\nfrom pathlib import Path\nfrom datetime import datetime, timedelta\n\nscript_path = Path.home() / \".openclaw\" / \"workspace\" / \"scripts\" / \"memory-consolidator.py\"\nresult = subprocess.run([sys.executable, str(script_path)], capture_output=True, text=True)\noutput = result.stdout or \"\"\nlines = output.strip().split(\"\\n\") if output else []\nsummary_lines = [line.strip() for line in lines if \"Processing:\" in line or \"Archived:\" in line or \"updated\" in line.lower()]\ndate_str = (datetime.now() - timedelta(days=1)).strftime(\"%Y-%m-%d\")\nreturn {\"date\": date_str, \"success\": result.returncode == 0, \"files_archived\": sum(1 for l in lines if \"Archived:\" in l), \"insights_extracted\": \"Research summaries:\" in output, \"summary\": \"\\n\".join(summary_lines[-5:]) if summary_lines else \"Consolidation complete\"}"
+        },
+        "name": "Run Consolidator",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          220,
+          0
+        ]
+      },
+      {
+        "id": "c3d4e5f6-a7b8-9012-cdef-123456789012",
+        "parameters": {
+          "authentication": "botToken",
+          "resource": "message",
+          "operation": "send",
+          "guildId": {
+            "mode": "id",
+            "value": "1204113877139198042"
+          },
+          "channelId": {
+            "mode": "id",
+            "value": "1468408934904889572"
+          },
+          "content": "={{ \"\ud83d\udcca **Memory Consolidator**\\n\\n\" + \"\ud83d\udcc5 \" + $json.date + \"\\n\\n\" + \"\u2705 Files archived: \" + String($json.files_archived) + \"\\n\" + \"\ud83d\udcdd Insights: \" + ($json.insights_extracted ? \"Extracted\" : \"None\") + \"\\n\\n\" + ($json.summary || \"Complete\") }}"
+        },
+        "name": "Discord Summary",
+        "type": "n8n-nodes-base.discord",
+        "typeVersion": 2,
+        "position": [
+          440,
+          0
+        ],
+        "credentials": {
+          "discordBotApi": {
+            "id": "ZDMFOE75AzwAAVO3",
+            "name": "Discord Bot account"
+          }
+        }
+      }
+    ],
+    "connections": {
+      "Daily 2AM PDT": {
+        "main": [
+          [
+            {
+              "node": "Run Consolidator",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Run Consolidator": {
+        "main": [
+          [
+            {
+              "node": "Discord Summary",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "authors": "monday bot",
+    "name": null,
+    "description": null,
+    "autosaved": false
+  },
+  "tags": []
+}

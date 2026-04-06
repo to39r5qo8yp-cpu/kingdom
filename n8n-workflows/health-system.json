@@ -1,9 +1,8 @@
 {
-  "updatedAt": "2026-04-02T00:47:41.405Z",
+  "updatedAt": "2026-04-04T05:01:56.347Z",
   "createdAt": "2026-03-26T19:06:29.000Z",
   "id": "health-check-001",
-  "name": "System Health Check",
-  "description": null,
+  "name": "Health System",
   "active": true,
   "isArchived": false,
   "nodes": [
@@ -388,7 +387,6 @@
   "pinData": null,
   "versionId": "c5c4efa9-fa83-4bd4-945d-0a6a664bc3f1",
   "activeVersionId": "c5c4efa9-fa83-4bd4-945d-0a6a664bc3f1",
-  "versionCounter": 18,
   "triggerCount": 2,
   "shared": [
     {
@@ -396,20 +394,9 @@
       "createdAt": "2026-03-31T22:44:26.266Z",
       "role": "workflow:owner",
       "workflowId": "health-check-001",
-      "projectId": "2wMuHrOZ0KpAorzn",
-      "project": {
-        "updatedAt": "2026-03-15T01:06:51.004Z",
-        "createdAt": "2026-03-15T01:05:30.851Z",
-        "id": "2wMuHrOZ0KpAorzn",
-        "name": "monday bot <a3171998@gmail.com>",
-        "type": "personal",
-        "icon": null,
-        "description": null,
-        "creatorId": "dc157584-5741-4a40-a086-70a91678825f"
-      }
+      "projectId": "2wMuHrOZ0KpAorzn"
     }
   ],
-  "tags": [],
   "activeVersion": {
     "updatedAt": "2026-04-02T00:47:41.406Z",
     "createdAt": "2026-04-02T00:47:41.406Z",
@@ -782,24 +769,7 @@
     "authors": "monday bot",
     "name": null,
     "description": null,
-    "autosaved": false,
-    "workflowPublishHistory": [
-      {
-        "createdAt": "2026-04-02T00:47:41.461Z",
-        "id": 190,
-        "workflowId": "health-check-001",
-        "versionId": "c5c4efa9-fa83-4bd4-945d-0a6a664bc3f1",
-        "event": "activated",
-        "userId": "dc157584-5741-4a40-a086-70a91678825f"
-      },
-      {
-        "createdAt": "2026-04-02T00:47:41.439Z",
-        "id": 189,
-        "workflowId": "health-check-001",
-        "versionId": "c5c4efa9-fa83-4bd4-945d-0a6a664bc3f1",
-        "event": "deactivated",
-        "userId": "dc157584-5741-4a40-a086-70a91678825f"
-      }
-    ]
-  }
+    "autosaved": false
+  },
+  "tags": []
 }

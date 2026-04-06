@@ -1,9 +1,8 @@
 {
-  "updatedAt": "2026-04-02T00:42:13.183Z",
+  "updatedAt": "2026-04-05T15:43:47.220Z",
   "createdAt": "2026-03-25T17:45:34.867Z",
   "id": "quant-learning-001",
-  "name": "Quant Learning Engine",
-  "description": null,
+  "name": "Trading Quant Learning",
   "active": true,
   "isArchived": false,
   "nodes": [
@@ -211,7 +210,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const input = $input.first().json;\nconst analyzeData = $('Analyze Performance').first().json;\nconst currentThresholds = analyzeData.currentThresholds || {};\n\n// Parse AI response\nlet adjustments = {\n  rsi_oversold: currentThresholds.rsi_oversold || 30,\n  rsi_overbought: currentThresholds.rsi_overbought || 70,\n  volume_spike_multiplier: currentThresholds.volume_spike_multiplier || 1.5\n};\nlet reasoning = '';\nlet patternsToWatch = [];\nlet patternsToAvoid = [];\n\ntry {\n  const aiText = input.output || input.text || '';\n  const jsonMatch = aiText.match(/\\{[\\s\\S]*\\}/);\n  if (jsonMatch) {\n    const parsed = JSON.parse(jsonMatch[0]);\n    if (parsed.adjustments) {\n      adjustments = {\n        rsi_oversold: parsed.adjustments.rsi_oversold || adjustments.rsi_oversold,\n        rsi_overbought: parsed.adjustments.rsi_overbought || adjustments.rsi_overbought,\n        volume_spike_multiplier: parsed.adjustments.volume_spike_multiplier || adjustments.volume_spike_multiplier\n      };\n    }\n    reasoning = parsed.reasoning || '';\n    patternsToWatch = parsed.patterns_to_watch || [];\n    patternsToAvoid = parsed.patterns_to_avoid || [];\n  }\n} catch (e) {\n  // Keep defaults if AI response parsing fails\n}\n\n// Preserve signal history from Parse Data\nconst parseData = $('Parse Data').first().json;\n\n// Build updated metrics\nconst updatedMetrics = {\n  signals: parseData.metrics.signals || [],\n  accuracy: {\n    overall: analyzeData.overallAccuracy,\n    by_type: analyzeData.accuracyByType\n  },\n  last_updated: analyzeData.timestamp\n};\n\n// Build updated patterns\nconst updatedPatterns = {\n  patterns: [\n    {\n      name: 'rsi_oversold_bounce',\n      conditions: ['rsi_14 < ' + adjustments.rsi_oversold, 'volume > avg_volume'],\n      action: 'buy',\n      success_rate: (analyzeData.accuracyByType?.rsi_oversold?.rate || 50) / 100,\n      samples: analyzeData.accuracyByType?.rsi_oversold?.total || 0\n    },\n    {\n      name: 'rsi_overbought_reversal',\n      conditions: ['rsi_14 > ' + adjustments.rsi_overbought, 'volume > avg_volume'],\n      action: 'sell',\n      success_rate: (analyzeData.accuracyByType?.rsi_overbought?.rate || 50) / 100,\n      samples: analyzeData.accuracyByType?.rsi_overbought?.total || 0\n    }\n  ],\n  threshold_adjustments: adjustments,\n  patterns_to_watch: patternsToWatch,\n  patterns_to_avoid: patternsToAvoid,\n  reasoning: reasoning,\n  last_updated: analyzeData.timestamp\n};\n\n// Create binary data for file writing\nconst metricsBinary = Buffer.from(JSON.stringify(updatedMetrics, null, 2)).toString('base64');\nconst patternsBinary = Buffer.from(JSON.stringify(updatedPatterns, null, 2)).toString('base64');\n\nreturn [{\n  json: {\n    metrics: updatedMetrics,\n    patterns: updatedPatterns,\n    summary: {\n      accuracy: analyzeData.overallAccuracy + '%',\n      signals_analyzed: analyzeData.evaluatedCount,\n      threshold_changes: JSON.stringify(adjustments),\n      reasoning: reasoning\n    }\n  },\n  binary: {\n    metrics_data: {\n      data: metricsBinary,\n      mimeType: 'application/json',\n      fileName: 'metrics.json'\n    },\n    patterns_data: {\n      data: patternsBinary,\n      mimeType: 'application/json',\n      fileName: 'patterns.json'\n    }\n  }\n}];"
+        "jsCode": "const input = $input.first().json;\nconst analyzeData = $('Analyze Performance').first().json;\nconst currentThresholds = analyzeData.currentThresholds || {};\n\n// Parse AI response with robust JSON extraction\nlet adjustments = {\n  rsi_oversold: currentThresholds.rsi_oversold || 30,\n  rsi_overbought: currentThresholds.rsi_overbought || 70,\n  volume_spike_multiplier: currentThresholds.volume_spike_multiplier || 1.5\n};\nlet reasoning = '';\nlet patternsToWatch = [];\nlet patternsToAvoid = [];\n\ntry {\n  const aiText = input.output || input.text || '';\n  \n  // Try to extract JSON from code blocks first (```json ... ```)\n  let jsonStr = null;\n  const codeBlockMatch = aiText.match(/```(?:json)?\\s*\\n([\\s\\S]*?)\\n```/);\n  if (codeBlockMatch) {\n    jsonStr = codeBlockMatch[1].trim();\n  } else {\n    // Fallback: find first complete JSON object\n    const jsonMatch = aiText.match(/\\{[^{}]*\\}/);\n    if (jsonMatch) {\n      jsonStr = jsonMatch[0];\n    }\n  }\n  \n  if (jsonStr) {\n    const parsed = JSON.parse(jsonStr);\n    if (parsed.adjustments) {\n      adjustments = {\n        rsi_oversold: parsed.adjustments.rsi_oversold || adjustments.rsi_oversold,\n        rsi_overbought: parsed.adjustments.rsi_overbought || adjustments.rsi_overbought,\n        volume_spike_multiplier: parsed.adjustments.volume_spike_multiplier || adjustments.volume_spike_multiplier\n      };\n    }\n    reasoning = parsed.reasoning || '';\n    patternsToWatch = parsed.patterns_to_watch || [];\n    patternsToAvoid = parsed.patterns_to_avoid || [];\n  }\n} catch (e) {\n  // Keep defaults if AI response parsing fails\n  console.log('AI response parsing failed, using defaults:', e.message);\n}\n\n// Preserve signal history from Parse Data\nconst parseData = $('Parse Data').first().json;\n\n// Build updated metrics\nconst updatedMetrics = {\n  signals: parseData.metrics?.signals || [],\n  accuracy: {\n    overall: analyzeData.overallAccuracy,\n    by_type: analyzeData.accuracyByType\n  },\n  last_updated: analyzeData.timestamp\n};\n\n// Build updated patterns\nconst updatedPatterns = {\n  patterns: [\n    {\n      name: 'rsi_oversold_bounce',\n      conditions: ['rsi_14 < ' + adjustments.rsi_oversold, 'volume > avg_volume'],\n      action: 'buy',\n      success_rate: (analyzeData.accuracyByType?.rsi_oversold?.rate || 50) / 100,\n      samples: analyzeData.accuracyByType?.rsi_oversold?.total || 0\n    },\n    {\n      name: 'rsi_overbought_reversal',\n      conditions: ['rsi_14 > ' + adjustments.rsi_overbought, 'volume > avg_volume'],\n      action: 'sell',\n      success_rate: (analyzeData.accuracyByType?.rsi_overbought?.rate || 50) / 100,\n      samples: analyzeData.accuracyByType?.rsi_overbought?.total || 0\n    }\n  ],\n  threshold_adjustments: adjustments,\n  patterns_to_watch: patternsToWatch,\n  patterns_to_avoid: patternsToAvoid,\n  reasoning: reasoning,\n  last_updated: analyzeData.timestamp\n};\n\n// Create binary data for file writing\nconst metricsBinary = Buffer.from(JSON.stringify(updatedMetrics, null, 2)).toString('base64');\nconst patternsBinary = Buffer.from(JSON.stringify(updatedPatterns, null, 2)).toString('base64');\n\nreturn [{\n  json: {\n    metrics: updatedMetrics,\n    patterns: updatedPatterns,\n    summary: {\n      accuracy: analyzeData.overallAccuracy + '%',\n      signals_analyzed: analyzeData.evaluatedCount,\n      threshold_changes: JSON.stringify(adjustments),\n      reasoning: reasoning\n    }\n  },\n  binary: {\n    metrics_data: {\n      data: metricsBinary,\n      mimeType: 'application/json',\n      fileName: 'metrics.json'\n    },\n    patterns_data: {\n      data: patternsBinary,\n      mimeType: 'application/json',\n      fileName: 'patterns.json'\n    }\n  }\n}];"
       },
       "name": "Apply Learning",
       "type": "n8n-nodes-base.code",
@@ -457,9 +456,8 @@
   },
   "meta": null,
   "pinData": {},
-  "versionId": "5133cc22-6178-4c7c-b53b-5b3ff4a8c91b",
-  "activeVersionId": "5133cc22-6178-4c7c-b53b-5b3ff4a8c91b",
-  "versionCounter": 192,
+  "versionId": "3d9d91af-832b-416a-bc65-0f76e9832769",
+  "activeVersionId": "3d9d91af-832b-416a-bc65-0f76e9832769",
   "triggerCount": 1,
   "shared": [
     {
@@ -467,24 +465,13 @@
       "createdAt": "2026-03-25T17:45:34.871Z",
       "role": "workflow:owner",
       "workflowId": "quant-learning-001",
-      "projectId": "2wMuHrOZ0KpAorzn",
-      "project": {
-        "updatedAt": "2026-03-15T01:06:51.004Z",
-        "createdAt": "2026-03-15T01:05:30.851Z",
-        "id": "2wMuHrOZ0KpAorzn",
-        "name": "monday bot <a3171998@gmail.com>",
-        "type": "personal",
-        "icon": null,
-        "description": null,
-        "creatorId": "dc157584-5741-4a40-a086-70a91678825f"
-      }
+      "projectId": "2wMuHrOZ0KpAorzn"
     }
   ],
-  "tags": [],
   "activeVersion": {
-    "updatedAt": "2026-03-28T03:22:30.274Z",
-    "createdAt": "2026-03-28T03:22:30.274Z",
-    "versionId": "5133cc22-6178-4c7c-b53b-5b3ff4a8c91b",
+    "updatedAt": "2026-04-05T15:43:47.221Z",
+    "createdAt": "2026-04-05T15:43:47.221Z",
+    "versionId": "3d9d91af-832b-416a-bc65-0f76e9832769",
     "workflowId": "quant-learning-001",
     "nodes": [
       {
@@ -691,7 +678,7 @@
       },
       {
         "parameters": {
-          "jsCode": "const input = $input.first().json;\nconst analyzeData = $('Analyze Performance').first().json;\nconst currentThresholds = analyzeData.currentThresholds || {};\n\n// Parse AI response\nlet adjustments = {\n  rsi_oversold: currentThresholds.rsi_oversold || 30,\n  rsi_overbought: currentThresholds.rsi_overbought || 70,\n  volume_spike_multiplier: currentThresholds.volume_spike_multiplier || 1.5\n};\nlet reasoning = '';\nlet patternsToWatch = [];\nlet patternsToAvoid = [];\n\ntry {\n  const aiText = input.output || input.text || '';\n  const jsonMatch = aiText.match(/\\{[\\s\\S]*\\}/);\n  if (jsonMatch) {\n    const parsed = JSON.parse(jsonMatch[0]);\n    if (parsed.adjustments) {\n      adjustments = {\n        rsi_oversold: parsed.adjustments.rsi_oversold || adjustments.rsi_oversold,\n        rsi_overbought: parsed.adjustments.rsi_overbought || adjustments.rsi_overbought,\n        volume_spike_multiplier: parsed.adjustments.volume_spike_multiplier || adjustments.volume_spike_multiplier\n      };\n    }\n    reasoning = parsed.reasoning || '';\n    patternsToWatch = parsed.patterns_to_watch || [];\n    patternsToAvoid = parsed.patterns_to_avoid || [];\n  }\n} catch (e) {\n  // Keep defaults if AI response parsing fails\n}\n\n// Preserve signal history from Parse Data\nconst parseData = $('Parse Data').first().json;\n\n// Build updated metrics\nconst updatedMetrics = {\n  signals: parseData.metrics.signals || [],\n  accuracy: {\n    overall: analyzeData.overallAccuracy,\n    by_type: analyzeData.accuracyByType\n  },\n  last_updated: analyzeData.timestamp\n};\n\n// Build updated patterns\nconst updatedPatterns = {\n  patterns: [\n    {\n      name: 'rsi_oversold_bounce',\n      conditions: ['rsi_14 < ' + adjustments.rsi_oversold, 'volume > avg_volume'],\n      action: 'buy',\n      success_rate: (analyzeData.accuracyByType?.rsi_oversold?.rate || 50) / 100,\n      samples: analyzeData.accuracyByType?.rsi_oversold?.total || 0\n    },\n    {\n      name: 'rsi_overbought_reversal',\n      conditions: ['rsi_14 > ' + adjustments.rsi_overbought, 'volume > avg_volume'],\n      action: 'sell',\n      success_rate: (analyzeData.accuracyByType?.rsi_overbought?.rate || 50) / 100,\n      samples: analyzeData.accuracyByType?.rsi_overbought?.total || 0\n    }\n  ],\n  threshold_adjustments: adjustments,\n  patterns_to_watch: patternsToWatch,\n  patterns_to_avoid: patternsToAvoid,\n  reasoning: reasoning,\n  last_updated: analyzeData.timestamp\n};\n\n// Create binary data for file writing\nconst metricsBinary = Buffer.from(JSON.stringify(updatedMetrics, null, 2)).toString('base64');\nconst patternsBinary = Buffer.from(JSON.stringify(updatedPatterns, null, 2)).toString('base64');\n\nreturn [{\n  json: {\n    metrics: updatedMetrics,\n    patterns: updatedPatterns,\n    summary: {\n      accuracy: analyzeData.overallAccuracy + '%',\n      signals_analyzed: analyzeData.evaluatedCount,\n      threshold_changes: JSON.stringify(adjustments),\n      reasoning: reasoning\n    }\n  },\n  binary: {\n    metrics_data: {\n      data: metricsBinary,\n      mimeType: 'application/json',\n      fileName: 'metrics.json'\n    },\n    patterns_data: {\n      data: patternsBinary,\n      mimeType: 'application/json',\n      fileName: 'patterns.json'\n    }\n  }\n}];"
+          "jsCode": "const input = $input.first().json;\nconst analyzeData = $('Analyze Performance').first().json;\nconst currentThresholds = analyzeData.currentThresholds || {};\n\n// Parse AI response with robust JSON extraction\nlet adjustments = {\n  rsi_oversold: currentThresholds.rsi_oversold || 30,\n  rsi_overbought: currentThresholds.rsi_overbought || 70,\n  volume_spike_multiplier: currentThresholds.volume_spike_multiplier || 1.5\n};\nlet reasoning = '';\nlet patternsToWatch = [];\nlet patternsToAvoid = [];\n\ntry {\n  const aiText = input.output || input.text || '';\n  \n  // Try to extract JSON from code blocks first (```json ... ```)\n  let jsonStr = null;\n  const codeBlockMatch = aiText.match(/```(?:json)?\\s*\\n([\\s\\S]*?)\\n```/);\n  if (codeBlockMatch) {\n    jsonStr = codeBlockMatch[1].trim();\n  } else {\n    // Fallback: find first complete JSON object\n    const jsonMatch = aiText.match(/\\{[^{}]*\\}/);\n    if (jsonMatch) {\n      jsonStr = jsonMatch[0];\n    }\n  }\n  \n  if (jsonStr) {\n    const parsed = JSON.parse(jsonStr);\n    if (parsed.adjustments) {\n      adjustments = {\n        rsi_oversold: parsed.adjustments.rsi_oversold || adjustments.rsi_oversold,\n        rsi_overbought: parsed.adjustments.rsi_overbought || adjustments.rsi_overbought,\n        volume_spike_multiplier: parsed.adjustments.volume_spike_multiplier || adjustments.volume_spike_multiplier\n      };\n    }\n    reasoning = parsed.reasoning || '';\n    patternsToWatch = parsed.patterns_to_watch || [];\n    patternsToAvoid = parsed.patterns_to_avoid || [];\n  }\n} catch (e) {\n  // Keep defaults if AI response parsing fails\n  console.log('AI response parsing failed, using defaults:', e.message);\n}\n\n// Preserve signal history from Parse Data\nconst parseData = $('Parse Data').first().json;\n\n// Build updated metrics\nconst updatedMetrics = {\n  signals: parseData.metrics?.signals || [],\n  accuracy: {\n    overall: analyzeData.overallAccuracy,\n    by_type: analyzeData.accuracyByType\n  },\n  last_updated: analyzeData.timestamp\n};\n\n// Build updated patterns\nconst updatedPatterns = {\n  patterns: [\n    {\n      name: 'rsi_oversold_bounce',\n      conditions: ['rsi_14 < ' + adjustments.rsi_oversold, 'volume > avg_volume'],\n      action: 'buy',\n      success_rate: (analyzeData.accuracyByType?.rsi_oversold?.rate || 50) / 100,\n      samples: analyzeData.accuracyByType?.rsi_oversold?.total || 0\n    },\n    {\n      name: 'rsi_overbought_reversal',\n      conditions: ['rsi_14 > ' + adjustments.rsi_overbought, 'volume > avg_volume'],\n      action: 'sell',\n      success_rate: (analyzeData.accuracyByType?.rsi_overbought?.rate || 50) / 100,\n      samples: analyzeData.accuracyByType?.rsi_overbought?.total || 0\n    }\n  ],\n  threshold_adjustments: adjustments,\n  patterns_to_watch: patternsToWatch,\n  patterns_to_avoid: patternsToAvoid,\n  reasoning: reasoning,\n  last_updated: analyzeData.timestamp\n};\n\n// Create binary data for file writing\nconst metricsBinary = Buffer.from(JSON.stringify(updatedMetrics, null, 2)).toString('base64');\nconst patternsBinary = Buffer.from(JSON.stringify(updatedPatterns, null, 2)).toString('base64');\n\nreturn [{\n  json: {\n    metrics: updatedMetrics,\n    patterns: updatedPatterns,\n    summary: {\n      accuracy: analyzeData.overallAccuracy + '%',\n      signals_analyzed: analyzeData.evaluatedCount,\n      threshold_changes: JSON.stringify(adjustments),\n      reasoning: reasoning\n    }\n  },\n  binary: {\n    metrics_data: {\n      data: metricsBinary,\n      mimeType: 'application/json',\n      fileName: 'metrics.json'\n    },\n    patterns_data: {\n      data: patternsBinary,\n      mimeType: 'application/json',\n      fileName: 'patterns.json'\n    }\n  }\n}];"
         },
         "name": "Apply Learning",
         "type": "n8n-nodes-base.code",
@@ -927,48 +914,7 @@
     "authors": "monday bot",
     "name": null,
     "description": null,
-    "autosaved": false,
-    "workflowPublishHistory": [
-      {
-        "createdAt": "2026-03-28T03:22:30.337Z",
-        "id": 165,
-        "workflowId": "quant-learning-001",
-        "versionId": "5133cc22-6178-4c7c-b53b-5b3ff4a8c91b",
-        "event": "activated",
-        "userId": "dc157584-5741-4a40-a086-70a91678825f"
-      },
-      {
-        "createdAt": "2026-04-02T00:42:13.305Z",
-        "id": 182,
-        "workflowId": "quant-learning-001",
-        "versionId": "5133cc22-6178-4c7c-b53b-5b3ff4a8c91b",
-        "event": "activated",
-        "userId": "dc157584-5741-4a40-a086-70a91678825f"
-      },
-      {
-        "createdAt": "2026-03-28T03:22:30.316Z",
-        "id": 164,
-        "workflowId": "quant-learning-001",
-        "versionId": "5133cc22-6178-4c7c-b53b-5b3ff4a8c91b",
-        "event": "deactivated",
-        "userId": "dc157584-5741-4a40-a086-70a91678825f"
-      },
-      {
-        "createdAt": "2026-03-31T03:21:35.636Z",
-        "id": 167,
-        "workflowId": "quant-learning-001",
-        "versionId": "5133cc22-6178-4c7c-b53b-5b3ff4a8c91b",
-        "event": "deactivated",
-        "userId": "dc157584-5741-4a40-a086-70a91678825f"
-      },
-      {
-        "createdAt": "2026-04-02T00:42:13.257Z",
-        "id": 181,
-        "workflowId": "quant-learning-001",
-        "versionId": "5133cc22-6178-4c7c-b53b-5b3ff4a8c91b",
-        "event": "deactivated",
-        "userId": "dc157584-5741-4a40-a086-70a91678825f"
-      }
-    ]
-  }
+    "autosaved": false
+  },
+  "tags": []
 }

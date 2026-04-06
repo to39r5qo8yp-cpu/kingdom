@@ -1,7 +1,10 @@
 {
+  "updatedAt": "2026-04-04T05:03:13.260Z",
+  "createdAt": "2026-03-26T18:14:37.335Z",
   "id": "test-discord-001",
-  "name": "Test Discord Alert",
+  "name": "Test Discord",
   "active": true,
+  "isArchived": false,
   "nodes": [
     {
       "parameters": {},
@@ -43,7 +46,7 @@
     }
   ],
   "connections": {
-    "Manual Trigger": {
+    "Webhook": {
       "main": [
         [
           {
@@ -56,6 +59,88 @@
     }
   },
   "settings": {
-    "executionOrder": "v1"
-  }
+    "executionOrder": "v1",
+    "errorWorkflow": "RkD096H7kDZmEGcP",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": null,
+  "versionId": "fe7927f8-6d65-4089-9efd-fe3a0313e61d",
+  "activeVersionId": "fe7927f8-6d65-4089-9efd-fe3a0313e61d",
+  "triggerCount": 0,
+  "shared": [
+    {
+      "updatedAt": "2026-03-25T16:23:03.079Z",
+      "createdAt": "2026-03-25T16:23:03.079Z",
+      "role": "workflow:owner",
+      "workflowId": "test-discord-001",
+      "projectId": "2wMuHrOZ0KpAorzn"
+    }
+  ],
+  "activeVersion": {
+    "updatedAt": "2026-04-02T22:31:43.404Z",
+    "createdAt": "2026-04-02T22:31:43.404Z",
+    "versionId": "fe7927f8-6d65-4089-9efd-fe3a0313e61d",
+    "workflowId": "test-discord-001",
+    "nodes": [
+      {
+        "parameters": {},
+        "name": "Manual Trigger",
+        "type": "n8n-nodes-base.manualTrigger",
+        "typeVersion": 1,
+        "position": [
+          0,
+          0
+        ],
+        "id": "trigger"
+      },
+      {
+        "parameters": {
+          "content": "\ud83e\uddea Test alert from n8n trading system - workflows are now working!",
+          "guildId": {
+            "mode": "id",
+            "value": "1204113877139198042"
+          },
+          "channelId": {
+            "mode": "id",
+            "value": "1479570494385684603"
+          }
+        },
+        "name": "Send Discord Message",
+        "type": "n8n-nodes-base.discord",
+        "typeVersion": 2,
+        "position": [
+          200,
+          0
+        ],
+        "id": "discord",
+        "credentials": {
+          "discordBotApi": {
+            "id": "ZDMFOE75AzwAAVO3",
+            "name": "Discord Bot account"
+          }
+        }
+      }
+    ],
+    "connections": {
+      "Manual Trigger": {
+        "main": [
+          [
+            {
+              "node": "Send Discord Message",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "authors": "monday bot",
+    "name": null,
+    "description": null,
+    "autosaved": false
+  },
+  "tags": []
 }

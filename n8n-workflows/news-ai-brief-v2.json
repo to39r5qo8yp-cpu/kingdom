@@ -1,0 +1,468 @@
+{
+  "updatedAt": "2026-04-04T15:51:17.505Z",
+  "createdAt": "2026-04-04T03:30:33.484Z",
+  "id": "pSLTHTTJaoV4iy1t",
+  "name": "News AI Brief v2",
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 6 * * *"
+            }
+          ]
+        },
+        "options": {
+          "timezone": "America/Los_Angeles"
+        }
+      },
+      "name": "Schedule",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -400,
+        200
+      ],
+      "id": "e65b3753-424c-4740-893c-7d959e5420a1"
+    },
+    {
+      "parameters": {},
+      "name": "Manual",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -400,
+        40
+      ],
+      "id": "e52c3b9f-95cf-4d3e-b185-91ca0028b851"
+    },
+    {
+      "parameters": {
+        "url": "https://huggingface.co/blog/feed.xml",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "string"
+            }
+          }
+        }
+      },
+      "name": "Fetch HuggingFace",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -160,
+        40
+      ],
+      "id": "ad03aafa-dbc3-4606-9eef-8ac6a1588037"
+    },
+    {
+      "parameters": {
+        "url": "https://techcrunch.com/tag/artificial-intelligence/feed/",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "string"
+            }
+          }
+        }
+      },
+      "name": "Fetch TechCrunch",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -160,
+        160
+      ],
+      "id": "01ff9821-a40a-44ab-a76f-0e41c77d7880"
+    },
+    {
+      "parameters": {
+        "mode": "multiplex",
+        "inputsCount": 2
+      },
+      "name": "Merge",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        40,
+        100
+      ],
+      "id": "08e178bd-2f99-4995-b60c-07d77b52ee46"
+    },
+    {
+      "parameters": {
+        "jsCode": "const inputs = $input.all();\nconst articles = [];\nconst seen = new Set();\n\nfor (const inp of inputs) {\n  const xml = inp.json?.data || '';\n  const url = inp.json?.url || '';\n  const src = url.includes('huggingface') ? 'HF' : 'TC';\n  \n  const items = xml.match(/<item>[\\s\\S]*?<\\/item>/g) || [];\n  for (const item of items) {\n    const t = item.match(/<title>(?:<!\\[CDATA\\[)?([^<]+)/);\n    const l = item.match(/<link>([^<]+)/);\n    if (t && l) {\n      const title = t[1].trim();\n      if (!seen.has(title.toLowerCase().substring(0,30))) {\n        seen.add(title.toLowerCase().substring(0,30));\n        articles.push({source: src, title, link: l[1].trim()});\n      }\n    }\n  }\n}\n\n// Priority scoring - current models\nconst priority = {\n  'openclaw': 150,\n  'claude code': 150,\n  'llama 4': 140,\n  'gemma 4': 140,\n  'llama': 130,\n  'gemma': 130,\n  'computer use': 120,\n  'qwen': 120,\n  'mistral': 120,\n  'ollama': 110,\n  'agent': 100\n};\n\nconst scored = articles.map(a => {\n  const txt = a.title.toLowerCase();\n  let score = 0;\n  for (const [k,v] of Object.entries(priority)) { \n    if (txt.includes(k)) score = Math.max(score, v); \n  }\n  if (score === 0 && (txt.includes('claude')||txt.includes('model')||txt.includes('ai'))) score = 50;\n  return {...a, score};\n}).filter(a => a.score > 0).sort((a,b) => b.score - a.score).slice(0, 8);\n\nconst now = new Date();\nconst date = now.toLocaleDateString('en-US', {weekday:'short',month:'short',day:'numeric'});\nconst time = now.toLocaleTimeString('en-US', {hour:'numeric',minute:'2-digit',hour12:true});\n\nconst items = scored.slice(0,5).map(a => '\u25b8 ' + a.title.substring(0, 55)).join('\\n');\n\nconst msg = `\ud83e\udd16 **AI & Model Updates**\n\\`${date}\\` \u2500 \\`${time} PT\\`\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n\n**\ud83d\udcf0 Latest AI News**\n\n${items}\n\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n\u23f0 Daily at 6 AM PDT`;\n\nreturn [{json: {content: msg}}];"
+      },
+      "name": "BuildMessage",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        200,
+        100
+      ],
+      "id": "34d7958a-92d2-48a6-a055-2eb297796ecd"
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "guildId": {
+          "mode": "id",
+          "value": "1204113877139198042"
+        },
+        "channelId": {
+          "mode": "id",
+          "value": "1489812812590088363"
+        },
+        "content": "={{ $json.content }}",
+        "options": {}
+      },
+      "name": "Discord",
+      "type": "n8n-nodes-base.discord",
+      "typeVersion": 2,
+      "position": [
+        400,
+        100
+      ],
+      "credentials": {
+        "discordBotApi": {
+          "id": "ZDMFOE75AzwAAVO3",
+          "name": "Discord Bot account"
+        }
+      },
+      "id": "5e0e26be-262f-49d3-9e91-3693fd05e036"
+    }
+  ],
+  "connections": {
+    "Schedule": {
+      "main": [
+        [
+          {
+            "node": "Fetch HuggingFace",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch TechCrunch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual": {
+      "main": [
+        [
+          {
+            "node": "Fetch HuggingFace",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch TechCrunch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch HuggingFace": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch TechCrunch": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "BuildMessage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "BuildMessage": {
+      "main": [
+        [
+          {
+            "node": "Discord",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "staticData": {
+    "node:Schedule": {
+      "recurrenceRules": []
+    },
+    "node:Schedule - 6AM PDT": {
+      "recurrenceRules": []
+    }
+  },
+  "meta": null,
+  "pinData": null,
+  "versionId": "10d7d11a-73ef-4f8b-b6a4-b6e7e9b24d84",
+  "activeVersionId": "10d7d11a-73ef-4f8b-b6a4-b6e7e9b24d84",
+  "triggerCount": 1,
+  "shared": [
+    {
+      "updatedAt": "2026-04-04T03:30:33.487Z",
+      "createdAt": "2026-04-04T03:30:33.487Z",
+      "role": "workflow:owner",
+      "workflowId": "pSLTHTTJaoV4iy1t",
+      "projectId": "2wMuHrOZ0KpAorzn"
+    }
+  ],
+  "activeVersion": {
+    "updatedAt": "2026-04-04T15:51:17.506Z",
+    "createdAt": "2026-04-04T15:51:17.506Z",
+    "versionId": "10d7d11a-73ef-4f8b-b6a4-b6e7e9b24d84",
+    "workflowId": "pSLTHTTJaoV4iy1t",
+    "nodes": [
+      {
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "cronExpression",
+                "expression": "0 6 * * *"
+              }
+            ]
+          },
+          "options": {
+            "timezone": "America/Los_Angeles"
+          }
+        },
+        "name": "Schedule",
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.3,
+        "position": [
+          -400,
+          200
+        ],
+        "id": "e65b3753-424c-4740-893c-7d959e5420a1"
+      },
+      {
+        "parameters": {},
+        "name": "Manual",
+        "type": "n8n-nodes-base.manualTrigger",
+        "typeVersion": 1,
+        "position": [
+          -400,
+          40
+        ],
+        "id": "e52c3b9f-95cf-4d3e-b185-91ca0028b851"
+      },
+      {
+        "parameters": {
+          "url": "https://huggingface.co/blog/feed.xml",
+          "options": {
+            "response": {
+              "response": {
+                "responseFormat": "string"
+              }
+            }
+          }
+        },
+        "name": "Fetch HuggingFace",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.4,
+        "position": [
+          -160,
+          40
+        ],
+        "id": "ad03aafa-dbc3-4606-9eef-8ac6a1588037"
+      },
+      {
+        "parameters": {
+          "url": "https://techcrunch.com/tag/artificial-intelligence/feed/",
+          "options": {
+            "response": {
+              "response": {
+                "responseFormat": "string"
+              }
+            }
+          }
+        },
+        "name": "Fetch TechCrunch",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.4,
+        "position": [
+          -160,
+          160
+        ],
+        "id": "01ff9821-a40a-44ab-a76f-0e41c77d7880"
+      },
+      {
+        "parameters": {
+          "mode": "multiplex",
+          "inputsCount": 2
+        },
+        "name": "Merge",
+        "type": "n8n-nodes-base.merge",
+        "typeVersion": 3.2,
+        "position": [
+          40,
+          100
+        ],
+        "id": "08e178bd-2f99-4995-b60c-07d77b52ee46"
+      },
+      {
+        "parameters": {
+          "jsCode": "const inputs = $input.all();\nconst articles = [];\nconst seen = new Set();\n\nfor (const inp of inputs) {\n  const xml = inp.json?.data || '';\n  const url = inp.json?.url || '';\n  const src = url.includes('huggingface') ? 'HF' : 'TC';\n  \n  const items = xml.match(/<item>[\\s\\S]*?<\\/item>/g) || [];\n  for (const item of items) {\n    const t = item.match(/<title>(?:<!\\[CDATA\\[)?([^<]+)/);\n    const l = item.match(/<link>([^<]+)/);\n    if (t && l) {\n      const title = t[1].trim();\n      if (!seen.has(title.toLowerCase().substring(0,30))) {\n        seen.add(title.toLowerCase().substring(0,30));\n        articles.push({source: src, title, link: l[1].trim()});\n      }\n    }\n  }\n}\n\n// Priority scoring - current models\nconst priority = {\n  'openclaw': 150,\n  'claude code': 150,\n  'llama 4': 140,\n  'gemma 4': 140,\n  'llama': 130,\n  'gemma': 130,\n  'computer use': 120,\n  'qwen': 120,\n  'mistral': 120,\n  'ollama': 110,\n  'agent': 100\n};\n\nconst scored = articles.map(a => {\n  const txt = a.title.toLowerCase();\n  let score = 0;\n  for (const [k,v] of Object.entries(priority)) { \n    if (txt.includes(k)) score = Math.max(score, v); \n  }\n  if (score === 0 && (txt.includes('claude')||txt.includes('model')||txt.includes('ai'))) score = 50;\n  return {...a, score};\n}).filter(a => a.score > 0).sort((a,b) => b.score - a.score).slice(0, 8);\n\nconst now = new Date();\nconst date = now.toLocaleDateString('en-US', {weekday:'short',month:'short',day:'numeric'});\nconst time = now.toLocaleTimeString('en-US', {hour:'numeric',minute:'2-digit',hour12:true});\n\nconst items = scored.slice(0,5).map(a => '\u25b8 ' + a.title.substring(0, 55)).join('\\n');\n\nconst msg = `\ud83e\udd16 **AI & Model Updates**\n\\`${date}\\` \u2500 \\`${time} PT\\`\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n\n**\ud83d\udcf0 Latest AI News**\n\n${items}\n\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n\u23f0 Daily at 6 AM PDT`;\n\nreturn [{json: {content: msg}}];"
+        },
+        "name": "BuildMessage",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          200,
+          100
+        ],
+        "id": "34d7958a-92d2-48a6-a055-2eb297796ecd"
+      },
+      {
+        "parameters": {
+          "resource": "message",
+          "operation": "send",
+          "guildId": {
+            "mode": "id",
+            "value": "1204113877139198042"
+          },
+          "channelId": {
+            "mode": "id",
+            "value": "1489812812590088363"
+          },
+          "content": "={{ $json.content }}",
+          "options": {}
+        },
+        "name": "Discord",
+        "type": "n8n-nodes-base.discord",
+        "typeVersion": 2,
+        "position": [
+          400,
+          100
+        ],
+        "credentials": {
+          "discordBotApi": {
+            "id": "ZDMFOE75AzwAAVO3",
+            "name": "Discord Bot account"
+          }
+        },
+        "id": "5e0e26be-262f-49d3-9e91-3693fd05e036"
+      }
+    ],
+    "connections": {
+      "Schedule": {
+        "main": [
+          [
+            {
+              "node": "Fetch HuggingFace",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Fetch TechCrunch",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Manual": {
+        "main": [
+          [
+            {
+              "node": "Fetch HuggingFace",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Fetch TechCrunch",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Fetch HuggingFace": {
+        "main": [
+          [
+            {
+              "node": "Merge",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Fetch TechCrunch": {
+        "main": [
+          [
+            {
+              "node": "Merge",
+              "type": "main",
+              "index": 1
+            }
+          ]
+        ]
+      },
+      "Merge": {
+        "main": [
+          [
+            {
+              "node": "BuildMessage",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "BuildMessage": {
+        "main": [
+          [
+            {
+              "node": "Discord",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "authors": "monday bot",
+    "name": null,
+    "description": null,
+    "autosaved": false
+  },
+  "tags": []
+}

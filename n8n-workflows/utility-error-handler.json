@@ -1,9 +1,8 @@
 {
-  "updatedAt": "2026-04-02T00:41:30.246Z",
+  "updatedAt": "2026-04-04T05:02:44.043Z",
   "createdAt": "2026-04-02T00:41:30.246Z",
   "id": "RkD096H7kDZmEGcP",
-  "name": "Global Error Handler",
-  "description": null,
+  "name": "Utility Error Handler",
   "active": true,
   "isArchived": false,
   "nodes": [
@@ -95,7 +94,6 @@
   "pinData": null,
   "versionId": "93e904c6-841b-4b7e-903c-3643e496af4d",
   "activeVersionId": "93e904c6-841b-4b7e-903c-3643e496af4d",
-  "versionCounter": 4,
   "triggerCount": 0,
   "shared": [
     {
@@ -103,20 +101,9 @@
       "createdAt": "2026-04-02T00:41:30.250Z",
       "role": "workflow:owner",
       "workflowId": "RkD096H7kDZmEGcP",
-      "projectId": "2wMuHrOZ0KpAorzn",
-      "project": {
-        "updatedAt": "2026-03-15T01:06:51.004Z",
-        "createdAt": "2026-03-15T01:05:30.851Z",
-        "id": "2wMuHrOZ0KpAorzn",
-        "name": "monday bot <a3171998@gmail.com>",
-        "type": "personal",
-        "icon": null,
-        "description": null,
-        "creatorId": "dc157584-5741-4a40-a086-70a91678825f"
-      }
+      "projectId": "2wMuHrOZ0KpAorzn"
     }
   ],
-  "tags": [],
   "activeVersion": {
     "updatedAt": "2026-04-02T00:41:30.255Z",
     "createdAt": "2026-04-02T00:41:30.255Z",
@@ -204,16 +191,7 @@
     "authors": "monday bot",
     "name": null,
     "description": null,
-    "autosaved": false,
-    "workflowPublishHistory": [
-      {
-        "createdAt": "2026-04-02T00:41:30.309Z",
-        "id": 172,
-        "workflowId": "RkD096H7kDZmEGcP",
-        "versionId": "93e904c6-841b-4b7e-903c-3643e496af4d",
-        "event": "activated",
-        "userId": "dc157584-5741-4a40-a086-70a91678825f"
-      }
-    ]
-  }
+    "autosaved": false
+  },
+  "tags": []
 }

@@ -1,0 +1,107 @@
+{
+  "updatedAt": "2026-04-03T23:28:42.460Z",
+  "createdAt": "2026-04-03T23:28:42.460Z",
+  "id": "wlIpzvyk1h7htqwX",
+  "name": "Memory Notify v2",
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "memory-sync-done"
+      },
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "id": "a275b473-5ac5-4925-b2f8-2162b42d12bc"
+    },
+    {
+      "parameters": {
+        "content": "\ud83e\udde0 **Shared Memory Setup Complete**",
+        "guildId": {
+          "mode": "id",
+          "value": "1204113877139198042"
+        },
+        "channelId": {
+          "mode": "id",
+          "value": "1419496512118980718"
+        }
+      },
+      "name": "Discord",
+      "type": "n8n-nodes-base.discord",
+      "typeVersion": 2,
+      "position": [
+        200,
+        0
+      ],
+      "credentials": {
+        "discordBotApi": {
+          "id": "ZDMFOE75AzwAAVO3",
+          "name": "Discord Bot account"
+        }
+      },
+      "id": "ae957c71-cf60-4cef-b74a-4dfe5ad5a08b"
+    },
+    {
+      "parameters": {},
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        400,
+        0
+      ],
+      "id": "6c04fe63-4da0-4155-ab8d-1d3289dc12db"
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Discord",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Discord": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": null,
+  "versionId": "761db84a-9507-449b-b975-3685b273d98a",
+  "activeVersionId": null,
+  "triggerCount": 0,
+  "shared": [
+    {
+      "updatedAt": "2026-04-03T23:28:42.463Z",
+      "createdAt": "2026-04-03T23:28:42.463Z",
+      "role": "workflow:owner",
+      "workflowId": "wlIpzvyk1h7htqwX",
+      "projectId": "2wMuHrOZ0KpAorzn"
+    }
+  ],
+  "activeVersion": null,
+  "tags": []
+}

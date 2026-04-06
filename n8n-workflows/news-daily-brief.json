@@ -1,6 +1,9 @@
 {
-  "name": "Daily News Brief",
-  "description": null,
+  "updatedAt": "2026-04-04T15:12:38.415Z",
+  "createdAt": "2026-03-15T04:48:12.134Z",
+  "id": "daily-news-brief-001",
+  "name": "News Daily Brief",
+  "active": true,
   "isArchived": false,
   "nodes": [
     {
@@ -11,7 +14,8 @@
       "position": [
         -240,
         160
-      ]
+      ],
+      "id": "9db24be2-acb7-4450-a989-68cbd6bc3862"
     },
     {
       "parameters": {
@@ -38,7 +42,8 @@
       "position": [
         32,
         64
-      ]
+      ],
+      "id": "25396170-92de-45c2-bdb6-45d413c67e9f"
     },
     {
       "parameters": {
@@ -65,7 +70,8 @@
       "position": [
         32,
         192
-      ]
+      ],
+      "id": "338abb8b-b895-45a4-b257-cc9d43e66ed5"
     },
     {
       "parameters": {
@@ -92,7 +98,8 @@
       "position": [
         32,
         320
-      ]
+      ],
+      "id": "9c714349-5e0b-4215-8d5e-016eb9c8ae5c"
     },
     {
       "parameters": {
@@ -104,7 +111,8 @@
       "position": [
         432,
         192
-      ]
+      ],
+      "id": "29404ee7-fa22-4595-aecf-1ccfffa46464"
     },
     {
       "parameters": {
@@ -116,7 +124,8 @@
       "position": [
         592,
         192
-      ]
+      ],
+      "id": "044b3696-97bf-49fe-95fd-0b9cd5a9c681"
     },
     {
       "parameters": {
@@ -131,9 +140,11 @@
       ],
       "credentials": {
         "ollamaApi": {
+          "id": "dCTVfWIVTHlRhGsF",
           "name": "Ollama account"
         }
-      }
+      },
+      "id": "524519da-e393-4bcd-82e9-ff251b2ced13"
     },
     {
       "parameters": {
@@ -145,11 +156,13 @@
       "position": [
         880,
         192
-      ]
+      ],
+      "id": "50d6b695-be17-4df6-ba30-55b15c11aa3c"
     },
     {
       "parameters": {
         "resource": "message",
+        "sendTo": "channel",
         "guildId": {
           "mode": "id",
           "value": "1204113877139198042"
@@ -170,9 +183,11 @@
       ],
       "credentials": {
         "discordBotApi": {
+          "id": "ZDMFOE75AzwAAVO3",
           "name": "Discord Bot account"
         }
-      }
+      },
+      "id": "4aa0fdf6-d78c-4195-b454-fd96720b2990"
     },
     {
       "parameters": {
@@ -184,7 +199,8 @@
       "position": [
         256,
         176
-      ]
+      ],
+      "id": "fbe57a41-3ede-4e66-9d0c-b025e444b70e"
     },
     {
       "parameters": {
@@ -206,7 +222,8 @@
       "position": [
         -224,
         304
-      ]
+      ],
+      "id": "2a8f4d41-2973-4c20-82fd-e3ea9b3c7ad0"
     }
   ],
   "connections": {
@@ -356,9 +373,8 @@
   },
   "meta": null,
   "pinData": {},
-  "versionId": "78b4ae9c-94a7-41f8-8ee6-bb5562e51f56",
-  "activeVersionId": "78b4ae9c-94a7-41f8-8ee6-bb5562e51f56",
-  "versionCounter": 415,
+  "versionId": "18677f21-7acc-4367-ae66-d5986f99ec12",
+  "activeVersionId": "18677f21-7acc-4367-ae66-d5986f99ec12",
   "triggerCount": 1,
   "shared": [
     {
@@ -366,24 +382,13 @@
       "createdAt": "2026-03-15T03:41:27.230Z",
       "role": "workflow:owner",
       "workflowId": "daily-news-brief-001",
-      "projectId": "2wMuHrOZ0KpAorzn",
-      "project": {
-        "updatedAt": "2026-03-15T01:06:51.004Z",
-        "createdAt": "2026-03-15T01:05:30.851Z",
-        "id": "2wMuHrOZ0KpAorzn",
-        "name": "monday bot <a3171998@gmail.com>",
-        "type": "personal",
-        "icon": null,
-        "description": null,
-        "creatorId": "dc157584-5741-4a40-a086-70a91678825f"
-      }
+      "projectId": "2wMuHrOZ0KpAorzn"
     }
   ],
-  "tags": [],
   "activeVersion": {
-    "updatedAt": "2026-04-04T04:24:43.653Z",
-    "createdAt": "2026-04-04T04:24:43.653Z",
-    "versionId": "78b4ae9c-94a7-41f8-8ee6-bb5562e51f56",
+    "updatedAt": "2026-04-04T15:12:38.416Z",
+    "createdAt": "2026-04-04T15:12:38.416Z",
+    "versionId": "18677f21-7acc-4367-ae66-d5986f99ec12",
     "workflowId": "daily-news-brief-001",
     "nodes": [
       {
@@ -395,7 +400,7 @@
           -240,
           160
         ],
-        "id": "manual-trigger-node"
+        "id": "9db24be2-acb7-4450-a989-68cbd6bc3862"
       },
       {
         "parameters": {
@@ -423,7 +428,7 @@
           32,
           64
         ],
-        "id": "fetch-bbc-node"
+        "id": "25396170-92de-45c2-bdb6-45d413c67e9f"
       },
       {
         "parameters": {
@@ -451,7 +456,7 @@
           32,
           192
         ],
-        "id": "fetch-investing-node"
+        "id": "338abb8b-b895-45a4-b257-cc9d43e66ed5"
       },
       {
         "parameters": {
@@ -479,7 +484,7 @@
           32,
           320
         ],
-        "id": "fetch-crypto-node"
+        "id": "9c714349-5e0b-4215-8d5e-016eb9c8ae5c"
       },
       {
         "parameters": {
@@ -492,7 +497,7 @@
           432,
           192
         ],
-        "id": "prepare-node"
+        "id": "29404ee7-fa22-4595-aecf-1ccfffa46464"
       },
       {
         "parameters": {
@@ -505,7 +510,7 @@
           592,
           192
         ],
-        "id": "ai-agent-node"
+        "id": "044b3696-97bf-49fe-95fd-0b9cd5a9c681"
       },
       {
         "parameters": {
@@ -518,13 +523,13 @@
           592,
           384
         ],
-        "id": "ollama-model-node",
         "credentials": {
           "ollamaApi": {
             "id": "dCTVfWIVTHlRhGsF",
             "name": "Ollama account"
           }
-        }
+        },
+        "id": "524519da-e393-4bcd-82e9-ff251b2ced13"
       },
       {
         "parameters": {
@@ -537,7 +542,7 @@
           880,
           192
         ],
-        "id": "format-node"
+        "id": "50d6b695-be17-4df6-ba30-55b15c11aa3c"
       },
       {
         "parameters": {
@@ -548,7 +553,7 @@
           },
           "channelId": {
             "mode": "id",
-            "value": "1468401952953204849"
+            "value": "1473525050903756933"
           },
           "content": "={{ $json.content }}",
           "options": {}
@@ -560,14 +565,13 @@
           1040,
           192
         ],
-        "id": "discord-node",
-        "webhookId": "57c58b76-550f-41cd-87e5-808412f6d20c",
         "credentials": {
           "discordBotApi": {
             "id": "ZDMFOE75AzwAAVO3",
             "name": "Discord Bot account"
           }
-        }
+        },
+        "id": "4aa0fdf6-d78c-4195-b454-fd96720b2990"
       },
       {
         "parameters": {
@@ -580,7 +584,7 @@
           256,
           176
         ],
-        "id": "merge-node"
+        "id": "fbe57a41-3ede-4e66-9d0c-b025e444b70e"
       },
       {
         "parameters": {
@@ -603,7 +607,7 @@
           -224,
           304
         ],
-        "id": "d8047a24-ba6f-4c77-bbe5-95fc26aaa1c6"
+        "id": "2a8f4d41-2973-4c20-82fd-e3ea9b3c7ad0"
       }
     ],
     "connections": {
@@ -741,24 +745,7 @@
     "authors": "monday bot",
     "name": null,
     "description": null,
-    "autosaved": false,
-    "workflowPublishHistory": [
-      {
-        "createdAt": "2026-04-04T04:24:43.707Z",
-        "id": 209,
-        "workflowId": "daily-news-brief-001",
-        "versionId": "78b4ae9c-94a7-41f8-8ee6-bb5562e51f56",
-        "event": "activated",
-        "userId": "dc157584-5741-4a40-a086-70a91678825f"
-      },
-      {
-        "createdAt": "2026-04-04T04:24:43.689Z",
-        "id": 208,
-        "workflowId": "daily-news-brief-001",
-        "versionId": "78b4ae9c-94a7-41f8-8ee6-bb5562e51f56",
-        "event": "deactivated",
-        "userId": "dc157584-5741-4a40-a086-70a91678825f"
-      }
-    ]
-  }
+    "autosaved": false
+  },
+  "tags": []
 }

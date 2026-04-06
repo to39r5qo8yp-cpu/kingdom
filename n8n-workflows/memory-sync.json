@@ -1,0 +1,82 @@
+{
+  "updatedAt": "2026-04-04T05:02:43.459Z",
+  "createdAt": "2026-04-03T23:25:41.984Z",
+  "id": "FanRicLWFAd1EBf3",
+  "name": "Memory Sync",
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {},
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "65bda8cd-4e33-4dbd-8001-5282ae2b30d1"
+    },
+    {
+      "parameters": {
+        "content": "\ud83e\udde0 **Shared Memory Setup Complete**\n\n**Device ID:** `IALK2TM-63H6TH2-RH74RLJ-VAGQOX7-ARWNKNP-AGR4PXA-HEPA2OJ-HIKAIAJ`\n**Public IP:** 129.146.85.212\n**GUI:** http://129.146.85.212:8384/\n\n**Setup New Device:**\n1. Install Syncthing\n2. Add remote device using Device ID\n3. Accept Memory folder share",
+        "guildId": {
+          "mode": "id",
+          "value": "1204113877139198042"
+        },
+        "channelId": {
+          "mode": "id",
+          "value": "1419496512118980718"
+        }
+      },
+      "name": "Send Discord Message",
+      "type": "n8n-nodes-base.discord",
+      "typeVersion": 2,
+      "position": [
+        200,
+        0
+      ],
+      "credentials": {
+        "discordBotApi": {
+          "id": "ZDMFOE75AzwAAVO3",
+          "name": "Discord Bot account"
+        }
+      },
+      "id": "ba997afe-424f-46b0-a2e2-2570b79c9c0f"
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Send Discord Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": null,
+  "versionId": "69af8127-41e5-41f9-be9d-1044ff2e0a69",
+  "activeVersionId": null,
+  "triggerCount": 0,
+  "shared": [
+    {
+      "updatedAt": "2026-04-03T23:25:41.990Z",
+      "createdAt": "2026-04-03T23:25:41.990Z",
+      "role": "workflow:owner",
+      "workflowId": "FanRicLWFAd1EBf3",
+      "projectId": "2wMuHrOZ0KpAorzn"
+    }
+  ],
+  "activeVersion": null,
+  "tags": []
+}
