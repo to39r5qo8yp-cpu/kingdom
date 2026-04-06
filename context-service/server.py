@@ -3,6 +3,11 @@ Context Management Service
 Provides SQLite-backed key/value context storage for n8n workflows.
 Supports TTL-based expiry and self-cleaning.
 
+Master Prompt System:
+  Stores client digital identities for AI context injection.
+  Based on Dan Martell's Master Prompt Architecture - provides
+  business context to AI conversations for consistent, high-quality outputs.
+
 API:
   GET    /health
   GET    /context/<workflow>/<session>            - get full context object
@@ -15,6 +20,13 @@ API:
   DELETE /context/<workflow>/<session>/history    - clear message history
   POST   /clean                                   - manual cleanup of expired rows
   GET    /stats                                   - row counts per workflow
+
+Master Prompt API:
+  GET    /master-prompt                           - list all clients with master prompts
+  GET    /master-prompt/<client>                  - get client's master prompt
+  POST   /master-prompt/<client>                  - create/update master prompt
+  DELETE /master-prompt/<client>                  - delete master prompt
+  GET    /master-prompt/<client>/format            - get formatted for AI injection
 """
 
 import sqlite3
@@ -26,6 +38,7 @@ from datetime import datetime, timezone
 from flask import Flask, request, jsonify
 
 DB_PATH = "/home/ubuntu/context-service/context.db"
+MASTER_PROMPT_DIR = "/home/ubuntu/context-service/master_prompts"
 CLEAN_INTERVAL_SECONDS = 300  # auto-clean every 5 minutes
 DEFAULT_TTL_SECONDS = 86400   # 24 hours default TTL
 MAX_HISTORY_ENTRIES = 50      # cap history per session
@@ -78,6 +91,16 @@ def init_db():
             CREATE INDEX IF NOT EXISTS idx_hist_lookup  ON history(workflow, session, created_at);
             CREATE INDEX IF NOT EXISTS idx_hist_expires ON history(expires_at)
                 WHERE expires_at IS NOT NULL;
+
+            CREATE TABLE IF NOT EXISTS master_prompt (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                client      TEXT    NOT NULL UNIQUE,
+                prompt_data TEXT    NOT NULL,
+                created_at  TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+                updated_at  TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_mp_client ON master_prompt(client);
         """)
     log.info("Database initialised at %s", DB_PATH)
 
@@ -290,6 +313,162 @@ def clear_history(workflow, session):
 def manual_clean():
     ctx, hist = clean_expired()
     return jsonify({"context_deleted": ctx, "history_deleted": hist})
+
+
+# ---------------------------------------------------------------------------
+# Routes — master prompt (client digital identity)
+# ---------------------------------------------------------------------------
+
+# Master prompt template structure (Dan Martell's framework)
+MASTER_PROMPT_TEMPLATE = {
+    "business": {
+        "model": "",
+        "revenue_range": "",
+        "pricing": [],
+        "stage": ""
+    },
+    "customer": {
+        "target": "",
+        "problems_solved": [],
+        "icp": "",
+        "decision_maker": ""
+    },
+    "products": {
+        "offerings": [],
+        "pricing_model": "",
+        "delivery_method": ""
+    },
+    "priorities": {
+        "current": [],
+        "constraints": [],
+        "timeline": ""
+    },
+    "brand": {
+        "voice": "",
+        "decision_style": "",
+        "values": []
+    },
+    "tools": {
+        "stack": [],
+        "workflows": [],
+        "integrations": []
+    },
+    "goals": {
+        "short_term": [],
+        "long_term": [],
+        "kpis": []
+    }
+}
+
+
+@app.get("/master-prompt")
+def list_master_prompts():
+    """List all clients with master prompts."""
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT client, created_at, updated_at FROM master_prompt ORDER BY updated_at DESC"
+        ).fetchall()
+    return jsonify([{
+        "client": r["client"],
+        "created_at": r["created_at"],
+        "updated_at": r["updated_at"]
+    } for r in rows])
+
+
+@app.get("/master-prompt/<client>")
+def get_master_prompt(client):
+    """Get a client's master prompt."""
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT prompt_data, created_at, updated_at FROM master_prompt WHERE client=?",
+            (client,)
+        ).fetchone()
+    if not row:
+        return jsonify({"error": "not found"}), 404
+    return jsonify({
+        "client": client,
+        "prompt": json.loads(row["prompt_data"]),
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"]
+    })
+
+
+@app.post("/master-prompt/<client>")
+def set_master_prompt(client):
+    """Create or update a client's master prompt."""
+    body = request.get_json(force=True) or {}
+    prompt_data = body.get("prompt", body.get("data", {}))
+
+    # Validate and merge with template
+    validated = MASTER_PROMPT_TEMPLATE.copy()
+    for section, fields in prompt_data.items():
+        if section in validated:
+            if isinstance(fields, dict):
+                validated[section].update({k: v for k, v in fields.items() if v})
+            else:
+                validated[section] = fields
+
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%fZ")
+    with get_db() as conn:
+        conn.execute("""
+            INSERT INTO master_prompt (client, prompt_data, created_at, updated_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(client) DO UPDATE SET
+                prompt_data = excluded.prompt_data,
+                updated_at = excluded.updated_at
+        """, (client, json.dumps(validated), now, now))
+
+    return jsonify({"ok": True, "client": client, "prompt": validated})
+
+
+@app.delete("/master-prompt/<client>")
+def delete_master_prompt(client):
+    """Delete a client's master prompt."""
+    with get_db() as conn:
+        n = conn.execute(
+            "DELETE FROM master_prompt WHERE client=?", (client,)
+        ).rowcount
+    return jsonify({"deleted": n})
+
+
+@app.get("/master-prompt/<client>/format")
+def format_master_prompt(client):
+    """Get master prompt formatted for AI context injection.
+
+    Returns a formatted string suitable for pasting into an AI conversation
+    as system context, following Dan Martell's Master Prompt Architecture.
+    """
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT prompt_data FROM master_prompt WHERE client=?",
+            (client,)
+        ).fetchone()
+    if not row:
+        return jsonify({"error": "not found"}), 404
+
+    data = json.loads(row["prompt_data"])
+
+    # Format as markdown-style context block
+    lines = [f"# {client} - Master Prompt Context\n"]
+    lines.append("This is the client's digital identity. Use this context for all AI interactions.\n")
+
+    for section, fields in data.items():
+        if isinstance(fields, dict) and any(fields.values()):
+            lines.append(f"## {section.title()}")
+            for key, value in fields.items():
+                if value:
+                    if isinstance(value, list):
+                        lines.append(f"- **{key}**: {', '.join(str(v) for v in value)}")
+                    else:
+                        lines.append(f"- **{key}**: {value}")
+            lines.append("")
+
+    formatted = "\n".join(lines)
+    return jsonify({
+        "client": client,
+        "formatted": formatted,
+        "raw": data
+    })
 
 
 # ---------------------------------------------------------------------------
