@@ -1,0 +1,525 @@
+{
+  "id": "trading-signals-001",
+  "name": "Trading Signals Monitor v2.0 - Enhanced",
+  "nodes": [
+    {
+      "parameters": {},
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -600,
+        200
+      ],
+      "id": "manual"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "trading-signals-trigger",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        -600,
+        400
+      ],
+      "id": "webhook-trigger"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 8 * * 1-5"
+            }
+          ]
+        },
+        "options": {
+          "timezone": "America/Los_Angeles"
+        }
+      },
+      "name": "Morning Scan 8AM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -600,
+        -100
+      ],
+      "id": "morning-scan"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 12 * * 1-5"
+            }
+          ]
+        },
+        "options": {
+          "timezone": "America/Los_Angeles"
+        }
+      },
+      "name": "Midday Scan 12PM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -600,
+        100
+      ],
+      "id": "afternoon-scan"
+    },
+    {
+      "parameters": {
+        "filePath": "/home/ubuntu/.n8n-files/Trading/positions/active.json",
+        "options": {
+          "errorHandling": "continue"
+        }
+      },
+      "name": "Load Positions",
+      "type": "n8n-nodes-base.readBinaryFile",
+      "typeVersion": 1,
+      "position": [
+        -400,
+        200
+      ],
+      "id": "load-positions"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse positions with error handling and defaults\nlet positions = {};\ntry {\n  const binaryData = $('Load Positions').first().binary?.data?.data;\n  if (binaryData) {\n    const parsed = JSON.parse(Buffer.from(binaryData, 'base64').toString('utf-8'));\n    positions = parsed.positions || {};\n  }\n} catch (e) {\n  console.log('Positions file not found or invalid, using empty defaults');\n  positions = {};\n}\n\nconst watchlist = {\n  stocks: ['NVDA', 'MSFT', 'GOOGL', 'AAPL', 'VOO', 'META', 'AMZN'],\n  crypto: ['ethereum', 'solana']\n};\n\nreturn [{\n  json: {\n    positions,\n    watchlist,\n    timestamp: new Date().toISOString(),\n    source: 'Trading Signals Monitor v2.0'\n  }\n}];"
+      },
+      "name": "Prepare Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -200,
+        200
+      ],
+      "id": "prepare-input"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "quant-analyst-core-001",
+          "mode": "id"
+        }
+      },
+      "name": "Quant Analyst Core",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        200
+      ],
+      "id": "quant-core"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nconst signals = input.signals || [];\nconst timestamp = input.timestamp;\nconst optimizedParams = input.optimizedParams || {};\n\n// Categorize signals by priority with optimized thresholds\nconst critical = signals.filter(s => \n  s.urgency === 'critical' || (s.confidence >= 85 && s.action !== 'hold')\n);\n\nconst high = signals.filter(s => \n  (s.confidence >= 75 && s.confidence < 85 && s.action !== 'hold') ||\n  (s.urgency === 'high' && s.confidence >= 65)\n);\n\nconst medium = signals.filter(s => \n  s.urgency === 'medium' || \n  (s.confidence >= 60 && s.confidence < 75 && s.action !== 'hold')\n);\n\nconst low = signals.filter(s => s.confidence < 60 || s.action === 'hold');\n\n// Discord: Critical and High (confidence >= 75)\nconst discordSignals = [...critical, ...high.filter(s => s.confidence >= 75)];\n\n// Build Discord message\nlet discordMessage = '';\nif (discordSignals.length > 0) {\n  const now = new Date();\n  const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });\n  \n  if (critical.length > 0) {\n    discordMessage = '**🚨 CRITICAL ALERTS**\\n\\n';\n    critical.forEach(s => {\n      const emoji = s.action === 'buy' ? '🟢' : s.action === 'sell' ? '🔴' : '⚪';\n      discordMessage += `${emoji} **${s.symbol}**: ${s.action.toUpperCase()} (${s.confidence}/100)\\n`;\n      discordMessage += `> ${s.reason}\\n`;\n      if (s.tech_reasons?.length) discordMessage += `> Tech: ${s.tech_reasons.join(', ')}\\n`;\n      if (s.key_levels) {\n        discordMessage += `> Levels: Entry $${s.key_levels.entry} | Stop $${s.key_levels.stop} | Target $${s.key_levels.target}\\n`;\n      }\n    });\n    discordMessage += '\\n';\n  }\n  \n  if (high.filter(s => s.confidence >= 75).length > 0) {\n    discordMessage += '**📊 High Priority Signals**\\n';\n    high.filter(s => s.confidence >= 75).forEach(s => {\n      const emoji = s.action === 'buy' ? '🟢' : s.action === 'sell' ? '🔴' : '⚪';\n      discordMessage += `${emoji} ${s.symbol}: ${s.action.toUpperCase()} (${s.confidence}/100)\\n`;\n      discordMessage += `   ${s.reason}\\n`;\n    });\n  }\n  \n  discordMessage += `\\n⏰ ${timeStr} PT`;\n}\n\n// Build Obsidian content (all signals)\nconst obsidianLines = [];\nconst now = new Date();\nobsidianLines.push(`# Trading Signals - ${now.toISOString().split('T')[0]}`);\nobsidianLines.push(`\\n**Time:** ${now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })} PT`);\nobsidianLines.push(`\\n**Optimized Parameters Active:** ✅`);\nobsidianLines.push(`- RSI Oversold: ${optimizedParams.thresholds?.rsi_oversold || 30}`);\nobsidianLines.push(`- RSI Overbought: ${optimizedParams.thresholds?.rsi_overbought || 70}`);\nobsidianLines.push(`- Volume Spike: ${optimizedParams.thresholds?.volume_spike_multiplier || 1.5}x\\n`);\nobsidianLines.push(`## Market Overview\\n${input.market_overview || 'N/A'}\\n`);\n\nif (signals.length > 0) {\n  obsidianLines.push('## Signals\\n');\n  \n  if (critical.length > 0) {\n    obsidianLines.push('### 🚨 Critical\\n');\n    critical.forEach(s => {\n      obsidianLines.push(`#### ${s.symbol} - ${s.action.toUpperCase()}`);\n      obsidianLines.push(`- **Confidence:** ${s.confidence}/100`);\n      obsidianLines.push(`- **Urgency:** ${s.urgency || 'critical'}`);\n      obsidianLines.push(`- **Price:** $${s.price || 'N/A'}`);\n      obsidianLines.push(`- **Reason:** ${s.reason}`);\n      if (s.tech_reasons?.length) obsidianLines.push(`- **Technical:** ${s.tech_reasons.join(', ')}`);\n      if (s.key_levels) obsidianLines.push(`- **Levels:** Entry $${s.key_levels.entry}, Stop $${s.key_levels.stop}, Target $${s.key_levels.target}`);\n      obsidianLines.push('');\n    });\n  }\n  \n  if (high.length > 0) {\n    obsidianLines.push('### 📊 High Priority\\n');\n    high.forEach(s => {\n      obsidianLines.push(`#### ${s.symbol} - ${s.action.toUpperCase()}`);\n      obsidianLines.push(`- **Confidence:** ${s.confidence}/100`);\n      obsidianLines.push(`- **Price:** $${s.price || 'N/A'}`);\n      obsidianLines.push(`- **Reason:** ${s.reason}`);\n      if (s.tech_reasons?.length) obsidianLines.push(`- **Technical:** ${s.tech_reasons.join(', ')}`);\n      obsidianLines.push('');\n    });\n  }\n  \n  if (medium.length > 0) {\n    obsidianLines.push('### ⚪ Medium Priority\\n');\n    medium.forEach(s => {\n      obsidianLines.push(`- ${s.symbol}: ${s.action.toUpperCase()} (${s.confidence}/100) - ${s.reason}`);\n    });\n    obsidianLines.push('');\n  }\n}\n\nobsidianLines.push('## Recommendations');\nobsidianLines.push(input.recommendations || 'N/A');\nobsidianLines.push('\\n## Risk Assessment');\nobsidianLines.push(input.risk_assessment || 'N/A');\n\nif (optimizedParams.performance_metrics) {\n  obsidianLines.push('\\n## Backtest Performance (Walk-Forward Validated)');\n  obsidianLines.push(`- **Avg Sharpe Ratio:** ${optimizedParams.performance_metrics.avg_sharpe_ratio}`);\n  obsidianLines.push(`- **Avg Total Return:** ${optimizedParams.performance_metrics.avg_total_return}%`);\n  obsidianLines.push(`- **Optimization Date:** ${optimizedParams.performance_metrics.optimization_date}`);\n}\n\n// Truncate to Discord's 2000 char limit\nif (discordMessage.length > 1950) {\n  discordMessage = discordMessage.substring(0, 1940) + '\\n…(truncated)';\n}\n\nreturn [{\n  json: {\n    sendDiscord: discordMessage.length > 0,\n    discordMessage,\n    obsidianContent: obsidianLines.join('\\n'),\n    signals,\n    criticalCount: critical.length,\n    highCount: high.length,\n    mediumCount: medium.length,\n    lowCount: low.length,\n    timestamp,\n    optimizedParams\n  }\n}];"
+      },
+      "name": "Route Signals",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        200,
+        200
+      ],
+      "id": "route-signals"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare binary data for file writing\nconst input = $('Route Signals').first().json;\nconst obsidianContent = input.obsidianContent;\n\nconst binaryData = Buffer.from(obsidianContent).toString('base64');\nconst filename = new Date().toISOString().split('T')[0] + '.md';\n\nreturn [{\n  json: {\n    ...input,\n    filepath: '/home/ubuntu/.n8n-files/Trading/signals/' + filename,\n    filename\n  },\n  binary: {\n    data: {\n      data: binaryData,\n      mimeType: 'text/markdown',\n      fileName: filename,\n      fileExtension: 'md'\n    }\n  }\n}];"
+      },
+      "name": "Prepare Binary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        350,
+        200
+      ],
+      "id": "prepare-binary"
+    },
+    {
+      "parameters": {
+        "mode": "rules",
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.sendDiscord }}",
+                    "rightValue": true,
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "equals"
+                    }
+                  },
+                  {
+                    "leftValue": "={{ $json.discordMessage.length }}",
+                    "rightValue": 10,
+                    "operator": {
+                      "type": "number",
+                      "operation": "gte"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "name": "Should Discord",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        400,
+        100
+      ],
+      "id": "should-discord"
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "guildId": {
+          "mode": "id",
+          "value": "1204113877139198042"
+        },
+        "channelId": {
+          "mode": "id",
+          "value": "1479570494385684603"
+        },
+        "content": "={{ $json.discordMessage || 'No signals to report' }}",
+        "options": {}
+      },
+      "name": "Discord Alert",
+      "type": "n8n-nodes-base.discord",
+      "typeVersion": 2,
+      "position": [
+        600,
+        0
+      ],
+      "id": "discord",
+      "credentials": {
+        "discordBotApi": {
+          "id": "ZDMFOE75AzwAAVO3",
+          "name": "Discord Bot account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $('Route Signals').first().json;\nconst obsidianContent = input.obsidianContent;\nconst filename = new Date().toISOString().split('T')[0] + '.md';\n\nreturn [{\n  json: {\n    filename,\n    filepath: '/home/ubuntu/.n8n-files/Trading/signals/' + filename,\n    content: obsidianContent,\n    append: true\n  }\n}];"
+      },
+      "name": "Prepare Obsidian",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        300
+      ],
+      "id": "prepare-obsidian"
+    },
+    {
+      "parameters": {
+        "fileName": "={{ '/home/ubuntu/.n8n-files/Trading/signals/' + new Date().toISOString().split('T')[0] + '.md' }}",
+        "dataPropertyName": "data",
+        "options": {}
+      },
+      "name": "Save to Obsidian",
+      "type": "n8n-nodes-base.writeBinaryFile",
+      "typeVersion": 1,
+      "position": [
+        600,
+        300
+      ],
+      "id": "save-obsidian"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $('Route Signals').first().json;\nconst signals = input.signals || [];\nif (signals.length === 0) return [{ json: { skip: true } }];\n\nconst newEntries = signals.map(s => ({\n  symbol: s.symbol,\n  action: s.action,\n  confidence: s.confidence,\n  urgency: s.urgency || 'medium',\n  reason: s.reason,\n  tech_reasons: s.tech_reasons || [],\n  price: s.price,\n  timestamp: input.timestamp,\n  outcome: 'pending',\n  key_levels: s.key_levels || null\n}));\n\nreturn [{\n  json: {\n    signals: newEntries,\n    filepath: '/home/ubuntu/.n8n-files/Trading/performance/metrics.json'\n  }\n}];"
+      },
+      "name": "Log Signals",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        500
+      ],
+      "id": "log-signals"
+    },
+    {
+      "parameters": {
+        "filePath": "/home/ubuntu/.n8n-files/Trading/performance/metrics.json",
+        "options": {
+          "errorHandling": "continue"
+        }
+      },
+      "name": "Load Current Metrics",
+      "type": "n8n-nodes-base.readBinaryFile",
+      "typeVersion": 1,
+      "position": [
+        600,
+        500
+      ],
+      "id": "load-metrics"
+    },
+    {
+      "parameters": {
+        "jsCode": "const newSignals = $('Log Signals').first().json.signals;\nlet metrics = { signals: [], accuracy: { overall: 0, by_type: {} }, last_updated: null };\n\ntry {\n  const binaryData = $input.first().binary?.data?.data;\n  if (binaryData) {\n    metrics = JSON.parse(Buffer.from(binaryData, 'base64').toString('utf-8'));\n  }\n} catch (e) {}\n\nmetrics.signals = [...(metrics.signals || []), ...newSignals];\n\nif (metrics.signals.length > 500) {\n  metrics.signals = metrics.signals.slice(-500);\n}\n\nmetrics.last_updated = new Date().toISOString();\n\nconst metricsJson = JSON.stringify(metrics, null, 2);\nconst binaryContent = Buffer.from(metricsJson).toString('base64');\n\nreturn [{\n  json: {\n    filepath: '/home/ubuntu/.n8n-files/Trading/performance/metrics.json'\n  },\n  binary: {\n    data: {\n      data: binaryContent,\n      mimeType: 'application/json',\n      fileName: 'metrics.json'\n    }\n  }\n}];"
+      },
+      "name": "Append and Save Metrics",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        800,
+        500
+      ],
+      "id": "append-metrics"
+    },
+    {
+      "parameters": {
+        "fileName": "={{ $json.filepath }}",
+        "dataPropertyName": "data",
+        "options": {}
+      },
+      "name": "Save Metrics",
+      "type": "n8n-nodes-base.writeBinaryFile",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        500
+      ],
+      "id": "save-metrics"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Save latest signals as JSON for Python integration\nconst input = $('Route Signals').first().json;\nconst signals = input.signals || [];\n\nconst jsonContent = JSON.stringify({\n  timestamp: input.timestamp,\n  signals: signals,\n  market_overview: input.market_overview,\n  recommendations: input.recommendations,\n  risk_assessment: input.risk_assessment,\n  optimized_params: input.optimizedParams\n}, null, 2);\n\nreturn [{\n  json: {\n    filepath: '/home/ubuntu/.n8n-files/Trading/signals/latest_signals.json'\n  },\n  binary: {\n    data: {\n      data: Buffer.from(jsonContent).toString('base64'),\n      mimeType: 'application/json',\n      fileName: 'latest_signals.json'\n    }\n  }\n}];"
+      },
+      "name": "Save JSON Signals",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        700
+      ],
+      "id": "save-json"
+    },
+    {
+      "parameters": {
+        "fileName": "={{ $json.filepath }}",
+        "dataPropertyName": "data",
+        "options": {}
+      },
+      "name": "Write JSON",
+      "type": "n8n-nodes-base.writeBinaryFile",
+      "typeVersion": 1,
+      "position": [
+        600,
+        700
+      ],
+      "id": "write-json"
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Load Positions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Morning Scan 8AM": {
+      "main": [
+        [
+          {
+            "node": "Load Positions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Afternoon Scan 1PM": {
+      "main": [
+        [
+          {
+            "node": "Load Positions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Positions": {
+      "main": [
+        [
+          {
+            "node": "Prepare Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Input": {
+      "main": [
+        [
+          {
+            "node": "Quant Analyst Core",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Quant Analyst Core": {
+      "main": [
+        [
+          {
+            "node": "Route Signals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Signals": {
+      "main": [
+        [
+          {
+            "node": "Should Discord",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Prepare Obsidian",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Log Signals",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Prepare Binary",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Save JSON Signals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Should Discord": {
+      "main": [
+        [
+          {
+            "node": "Discord Alert",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Log Signals": {
+      "main": [
+        [
+          {
+            "node": "Load Current Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Current Metrics": {
+      "main": [
+        [
+          {
+            "node": "Append and Save Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append and Save Metrics": {
+      "main": [
+        [
+          {
+            "node": "Save Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save JSON Signals": {
+      "main": [
+        [
+          {
+            "node": "Write JSON",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Binary": {
+      "main": [
+        [
+          {
+            "node": "Save to Obsidian",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Load Positions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "staticData": {
+    "node:Morning Scan 8AM": {
+      "recurrenceRules": []
+    },
+    "node:Afternoon Scan 1PM": {
+      "recurrenceRules": []
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "active": true,
+  "versionId": "96af2fad-9f5d-46ee-aab6-3746f2cf352a"
+}

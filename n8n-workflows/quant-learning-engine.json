@@ -1,0 +1,974 @@
+{
+  "updatedAt": "2026-04-02T00:42:13.183Z",
+  "createdAt": "2026-03-25T17:45:34.867Z",
+  "id": "quant-learning-001",
+  "name": "Quant Learning Engine",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 0 * * *"
+            }
+          ]
+        },
+        "options": {
+          "timezone": "America/Los_Angeles"
+        }
+      },
+      "name": "Daily Schedule",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -400,
+        200
+      ],
+      "id": "daily-schedule"
+    },
+    {
+      "parameters": {},
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -400,
+        0
+      ],
+      "id": "manual"
+    },
+    {
+      "parameters": {
+        "filePath": "/home/ubuntu/.n8n-files/Trading/performance/metrics.json",
+        "options": {
+          "errorHandling": "continue"
+        }
+      },
+      "name": "Load Metrics",
+      "type": "n8n-nodes-base.readBinaryFile",
+      "typeVersion": 1,
+      "position": [
+        -200,
+        200
+      ],
+      "id": "load-metrics"
+    },
+    {
+      "parameters": {
+        "filePath": "/home/ubuntu/.n8n-files/Trading/learning/patterns.json",
+        "options": {
+          "errorHandling": "continue"
+        }
+      },
+      "name": "Load Patterns",
+      "type": "n8n-nodes-base.readBinaryFile",
+      "typeVersion": 1,
+      "position": [
+        -200,
+        400
+      ],
+      "id": "load-patterns"
+    },
+    {
+      "parameters": {
+        "filePath": "/home/ubuntu/.n8n-files/Trading/positions/active.json",
+        "options": {
+          "errorHandling": "continue"
+        }
+      },
+      "name": "Load Positions",
+      "type": "n8n-nodes-base.readBinaryFile",
+      "typeVersion": 1,
+      "position": [
+        -200,
+        0
+      ],
+      "id": "load-positions"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Use node references with proper defaults for missing files\nlet metrics = { \n  signals: [], \n  accuracy: { overall: 0, by_type: {} },\n  last_updated: null\n};\nlet patterns = { \n  patterns: [], \n  threshold_adjustments: {\n    rsi_oversold: 30,\n    rsi_overbought: 70,\n    volume_spike_multiplier: 1.5\n  },\n  confidence_weights: {\n    rsi: 0.40,\n    macd: 0.20,\n    volume: 0.15,\n    momentum: 0.15,\n    bollinger: 0.10\n  },\n  risk_parameters: {\n    stop_loss_pct: 6.0,\n    take_profit_pct: 8.0,\n    trailing_stop_pct: 4.0\n  }\n};\nlet positions = {};\n\ntry {\n  const metricsItem = $('Load Metrics').first();\n  if (metricsItem?.binary?.data?.data) {\n    metrics = JSON.parse(Buffer.from(metricsItem.binary.data.data, 'base64').toString('utf-8'));\n    // Ensure structure exists\n    if (!metrics.accuracy) metrics.accuracy = { overall: 0, by_type: {} };\n    if (!metrics.signals) metrics.signals = [];\n  }\n} catch (e) {\n  console.log('Metrics file not found or invalid, using defaults');\n}\n\ntry {\n  const patternsItem = $('Load Patterns').first();\n  if (patternsItem?.binary?.data?.data) {\n    patterns = JSON.parse(Buffer.from(patternsItem.binary.data.data, 'base64').toString('utf-8'));\n    // Merge with defaults\n    patterns.threshold_adjustments = { ...patterns.threshold_adjustments, ...(patterns.threshold_adjustments || {}) };\n    patterns.confidence_weights = { ...patterns.confidence_weights, ...(patterns.confidence_weights || {}) };\n  }\n} catch (e) {\n  console.log('Patterns file not found or invalid, using defaults');\n}\n\ntry {\n  const positionsItem = $('Load Positions').first();\n  if (positionsItem?.binary?.data?.data) {\n    const parsed = JSON.parse(Buffer.from(positionsItem.binary.data.data, 'base64').toString('utf-8'));\n    positions = parsed.positions || {};\n  }\n} catch (e) {\n  console.log('Positions file not found or invalid, using empty defaults');\n}\n\nreturn [{ json: { metrics, patterns, positions, timestamp: new Date().toISOString() } }];"
+      },
+      "name": "Parse Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        0,
+        200
+      ],
+      "id": "parse-data"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nconst metrics = input.metrics || {};\nconst positions = input.positions || {};\nconst patterns = input.patterns || {};\nconst timestamp = input.timestamp;\n\n// Calculate signal accuracy\nconst signals = metrics.signals || [];\nconst evaluatedSignals = signals.filter(s => s.outcome && s.outcome !== 'pending');\nconst correctSignals = evaluatedSignals.filter(s => s.outcome === 'correct');\nconst overallAccuracy = evaluatedSignals.length > 0\n  ? Math.round((correctSignals.length / evaluatedSignals.length) * 100)\n  : 50;\n\n// Analyze accuracy by signal type\nconst byType = {};\nconst signalTypes = ['stop_loss', 'take_profit', 'rsi_oversold', 'rsi_overbought', 'macd_cross', 'volume_spike'];\n\nfor (const type of signalTypes) {\n  const typeSignals = signals.filter(s => \n    s.tech_reasons?.some(r => r.toLowerCase().includes(type.replace('_', ' ')))\n  );\n  const evaluated = typeSignals.filter(s => s.outcome && s.outcome !== 'pending');\n  const correct = evaluated.filter(s => s.outcome === 'correct').length;\n  \n  byType[type] = {\n    correct,\n    total: evaluated.length,\n    rate: evaluated.length > 0 ? Math.round((correct / evaluated.length) * 100) : 50\n  };\n}\n\n// Build learning summary for AI\nconst summary = [];\nsummary.push('=== LEARNING ANALYSIS ===');\nsummary.push(`Overall Signal Accuracy: ${overallAccuracy}%`);\nsummary.push(`Total Signals: ${signals.length}`);\nsummary.push(`Evaluated: ${evaluatedSignals.length}`);\nsummary.push(`Pending: ${signals.filter(s => !s.outcome || s.outcome === 'pending').length}`);\nsummary.push('');\nsummary.push('Accuracy by Type:');\nfor (const [type, data] of Object.entries(byType)) {\n  if (data.total > 0) {\n    summary.push(`  ${type}: ${data.rate}% (${data.correct}/${data.total})`);\n  }\n}\nsummary.push('');\n\n// Current thresholds\nsummary.push('Current Thresholds:');\nconst thresholds = patterns.threshold_adjustments || {};\nsummary.push(`  RSI Oversold: ${thresholds.rsi_oversold || 30}`);\nsummary.push(`  RSI Overbought: ${thresholds.rsi_overbought || 70}`);\nsummary.push(`  Volume Spike Multiplier: ${thresholds.volume_spike_multiplier || 1.5}`);\n\nreturn [{\n  json: {\n    summary: summary.join('\\n'),\n    overallAccuracy,\n    accuracyByType: byType,\n    signalCount: signals.length,\n    evaluatedCount: evaluatedSignals.length,\n    currentThresholds: thresholds,\n    signals,\n    timestamp\n  }\n}];"
+      },
+      "name": "Analyze Performance",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        200,
+        200
+      ],
+      "id": "analyze-performance"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "http://127.0.0.1:11434/api/tags",
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "name": "Check Ollama Health",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        300,
+        50
+      ],
+      "id": "check-ollama-health",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "leftValue": "={{ $json.models }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "exists"
+              }
+            }
+          ]
+        }
+      },
+      "name": "Ollama Available?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        500,
+        200
+      ],
+      "id": "ollama-available"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Ollama unavailable - use rule-based adjustments\nconst analyzeData = $('Analyze Performance').first().json;\nconst currentThresholds = analyzeData.currentThresholds || {};\nconst accuracyByType = analyzeData.accuracyByType || {};\n\n// Rule-based adjustments (no AI)\nconst adjustments = { ...currentThresholds };\n\nfor (const [type, data] of Object.entries(accuracyByType)) {\n  if (data.total < 5) continue; // Not enough samples\n  \n  if (data.rate < 40) {\n    // Tighten threshold\n    if (type.includes('rsi_oversold')) adjustments.rsi_oversold = Math.max(20, (adjustments.rsi_oversold || 30) - 3);\n    if (type.includes('rsi_overbought')) adjustments.rsi_overbought = Math.min(80, (adjustments.rsi_overbought || 70) + 3);\n    if (type.includes('volume')) adjustments.volume_spike_multiplier = Math.min(3.0, (adjustments.volume_spike_multiplier || 1.5) + 0.2);\n  } else if (data.rate > 70) {\n    // Loosen threshold\n    if (type.includes('rsi_oversold')) adjustments.rsi_oversold = Math.min(35, (adjustments.rsi_oversold || 30) + 2);\n    if (type.includes('rsi_overbought')) adjustments.rsi_overbought = Math.max(65, (adjustments.rsi_overbought || 70) - 2);\n    if (type.includes('volume')) adjustments.volume_spike_multiplier = Math.max(1.2, (adjustments.volume_spike_multiplier || 1.5) - 0.1);\n  }\n}\n\n// Cap adjustments at \u00b120% from defaults\nconst defaults = { rsi_oversold: 30, rsi_overbought: 70, volume_spike_multiplier: 1.5 };\nfor (const key of Object.keys(adjustments)) {\n  const def = defaults[key] || adjustments[key];\n  const maxChange = def * 0.2;\n  adjustments[key] = Math.max(def - maxChange, Math.min(def + maxChange, adjustments[key]));\n}\n\nreturn [{\n  json: {\n    summary: analyzeData.summary,\n    adjustments,\n    reasoning: 'Rule-based fallback (Ollama unavailable)',\n    patternsToWatch: [],\n    patternsToAvoid: [],\n    fallbackMode: true\n  }\n}];"
+      },
+      "name": "Fallback Adjustments",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        700,
+        50
+      ],
+      "id": "fallback-adjustments"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.summary }}\n\nBased on this performance data, suggest threshold adjustments to improve signal accuracy.\n\nCurrent patterns and their success rates are shown above.\n\nRules:\n1. If a signal type has < 40% accuracy, tighten the threshold (make it harder to trigger)\n2. If a signal type has > 60% accuracy, consider loosening the threshold (make it easier to trigger)\n3. For RSI: oversold threshold should be LOWER to reduce false positives; overbought should be HIGHER\n4. Volume spike multiplier should increase if too many false signals\n\nOutput ONLY valid JSON:\n{\n  \"adjustments\": {\n    \"rsi_oversold\": 25,\n    \"rsi_overbought\": 75,\n    \"volume_spike_multiplier\": 2.0\n  },\n  \"reasoning\": \"Brief explanation of why these adjustments will improve accuracy\",\n  \"patterns_to_watch\": [\"list of patterns that showed strong predictive value\"],\n  \"patterns_to_avoid\": [\"list of patterns that had poor accuracy\"]\n}",
+        "options": {
+          "systemMessage": "You are a quantitative learning engine. Analyze signal performance data and suggest threshold adjustments to improve future accuracy. Focus on data-driven decisions.\n\nBe conservative with adjustments - only suggest changes when you have statistical confidence (at least 5 samples)."
+        }
+      },
+      "name": "AI Learning Analysis",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        400,
+        200
+      ],
+      "id": "ai-learning"
+    },
+    {
+      "parameters": {
+        "model": "glm-5:cloud",
+        "options": {
+          "temperature": 0.3
+        }
+      },
+      "name": "GLM-5 Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOllama",
+      "typeVersion": 1,
+      "position": [
+        400,
+        350
+      ],
+      "id": "glm-model",
+      "credentials": {
+        "ollamaApi": {
+          "id": "dCTVfWIVTHlRhGsF",
+          "name": "Ollama account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nconst analyzeData = $('Analyze Performance').first().json;\nconst currentThresholds = analyzeData.currentThresholds || {};\n\n// Parse AI response\nlet adjustments = {\n  rsi_oversold: currentThresholds.rsi_oversold || 30,\n  rsi_overbought: currentThresholds.rsi_overbought || 70,\n  volume_spike_multiplier: currentThresholds.volume_spike_multiplier || 1.5\n};\nlet reasoning = '';\nlet patternsToWatch = [];\nlet patternsToAvoid = [];\n\ntry {\n  const aiText = input.output || input.text || '';\n  const jsonMatch = aiText.match(/\\{[\\s\\S]*\\}/);\n  if (jsonMatch) {\n    const parsed = JSON.parse(jsonMatch[0]);\n    if (parsed.adjustments) {\n      adjustments = {\n        rsi_oversold: parsed.adjustments.rsi_oversold || adjustments.rsi_oversold,\n        rsi_overbought: parsed.adjustments.rsi_overbought || adjustments.rsi_overbought,\n        volume_spike_multiplier: parsed.adjustments.volume_spike_multiplier || adjustments.volume_spike_multiplier\n      };\n    }\n    reasoning = parsed.reasoning || '';\n    patternsToWatch = parsed.patterns_to_watch || [];\n    patternsToAvoid = parsed.patterns_to_avoid || [];\n  }\n} catch (e) {\n  // Keep defaults if AI response parsing fails\n}\n\n// Preserve signal history from Parse Data\nconst parseData = $('Parse Data').first().json;\n\n// Build updated metrics\nconst updatedMetrics = {\n  signals: parseData.metrics.signals || [],\n  accuracy: {\n    overall: analyzeData.overallAccuracy,\n    by_type: analyzeData.accuracyByType\n  },\n  last_updated: analyzeData.timestamp\n};\n\n// Build updated patterns\nconst updatedPatterns = {\n  patterns: [\n    {\n      name: 'rsi_oversold_bounce',\n      conditions: ['rsi_14 < ' + adjustments.rsi_oversold, 'volume > avg_volume'],\n      action: 'buy',\n      success_rate: (analyzeData.accuracyByType?.rsi_oversold?.rate || 50) / 100,\n      samples: analyzeData.accuracyByType?.rsi_oversold?.total || 0\n    },\n    {\n      name: 'rsi_overbought_reversal',\n      conditions: ['rsi_14 > ' + adjustments.rsi_overbought, 'volume > avg_volume'],\n      action: 'sell',\n      success_rate: (analyzeData.accuracyByType?.rsi_overbought?.rate || 50) / 100,\n      samples: analyzeData.accuracyByType?.rsi_overbought?.total || 0\n    }\n  ],\n  threshold_adjustments: adjustments,\n  patterns_to_watch: patternsToWatch,\n  patterns_to_avoid: patternsToAvoid,\n  reasoning: reasoning,\n  last_updated: analyzeData.timestamp\n};\n\n// Create binary data for file writing\nconst metricsBinary = Buffer.from(JSON.stringify(updatedMetrics, null, 2)).toString('base64');\nconst patternsBinary = Buffer.from(JSON.stringify(updatedPatterns, null, 2)).toString('base64');\n\nreturn [{\n  json: {\n    metrics: updatedMetrics,\n    patterns: updatedPatterns,\n    summary: {\n      accuracy: analyzeData.overallAccuracy + '%',\n      signals_analyzed: analyzeData.evaluatedCount,\n      threshold_changes: JSON.stringify(adjustments),\n      reasoning: reasoning\n    }\n  },\n  binary: {\n    metrics_data: {\n      data: metricsBinary,\n      mimeType: 'application/json',\n      fileName: 'metrics.json'\n    },\n    patterns_data: {\n      data: patternsBinary,\n      mimeType: 'application/json',\n      fileName: 'patterns.json'\n    }\n  }\n}];"
+      },
+      "name": "Apply Learning",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        600,
+        200
+      ],
+      "id": "apply-learning"
+    },
+    {
+      "parameters": {
+        "fileName": "/home/ubuntu/.n8n-files/Trading/performance/metrics.json",
+        "dataPropertyName": "metrics_data",
+        "options": {}
+      },
+      "name": "Save Metrics",
+      "type": "n8n-nodes-base.writeBinaryFile",
+      "typeVersion": 1,
+      "position": [
+        800,
+        100
+      ],
+      "id": "save-metrics"
+    },
+    {
+      "parameters": {
+        "fileName": "/home/ubuntu/.n8n-files/Trading/learning/patterns.json",
+        "dataPropertyName": "patterns_data",
+        "options": {}
+      },
+      "name": "Save Patterns",
+      "type": "n8n-nodes-base.writeBinaryFile",
+      "typeVersion": 1,
+      "position": [
+        800,
+        300
+      ],
+      "id": "save-patterns"
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "guildId": {
+          "mode": "id",
+          "value": "1204113877139198042"
+        },
+        "channelId": {
+          "mode": "id",
+          "value": "1479570494385684603"
+        },
+        "content": "={{ '**Daily Learning Update**\\n\\nTotal signals: ' + $json.summary.total_signals + '\\nSignals evaluated: ' + $json.summary.signals_analyzed + '\\nOverall accuracy: ' + $json.summary.accuracy + '\\nThreshold adjustments: ' + $json.summary.threshold_changes + '\\n\\n_' + $json.summary.reasoning + '_' }}",
+        "options": {}
+      },
+      "name": "Discord Notification",
+      "type": "n8n-nodes-base.discord",
+      "typeVersion": 2,
+      "position": [
+        1000,
+        200
+      ],
+      "id": "discord",
+      "credentials": {
+        "discordBotApi": {
+          "id": "ZDMFOE75AzwAAVO3",
+          "name": "Discord Bot account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Daily Schedule": {
+      "main": [
+        [
+          {
+            "node": "Load Positions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Load Positions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Positions": {
+      "main": [
+        [
+          {
+            "node": "Load Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Metrics": {
+      "main": [
+        [
+          {
+            "node": "Load Patterns",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Patterns": {
+      "main": [
+        [
+          {
+            "node": "Parse Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Data": {
+      "main": [
+        [
+          {
+            "node": "Analyze Performance",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Performance": {
+      "main": [
+        [
+          {
+            "node": "Check Ollama Health",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Learning Analysis": {
+      "main": [
+        [
+          {
+            "node": "Apply Learning",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apply Learning": {
+      "main": [
+        [
+          {
+            "node": "Save Metrics",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Save Patterns",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Discord Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GLM-5 Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Learning Analysis",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Ollama Health": {
+      "main": [
+        [
+          {
+            "node": "Ollama Available?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama Available?": {
+      "main": [
+        [
+          {
+            "node": "AI Learning Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fallback Adjustments",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fallback Adjustments": {
+      "main": [
+        [
+          {
+            "node": "Apply Learning",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false,
+    "errorWorkflow": "RkD096H7kDZmEGcP"
+  },
+  "staticData": {
+    "node:Daily Schedule": {
+      "recurrenceRules": []
+    }
+  },
+  "meta": null,
+  "pinData": {},
+  "versionId": "5133cc22-6178-4c7c-b53b-5b3ff4a8c91b",
+  "activeVersionId": "5133cc22-6178-4c7c-b53b-5b3ff4a8c91b",
+  "versionCounter": 192,
+  "triggerCount": 1,
+  "shared": [
+    {
+      "updatedAt": "2026-03-25T17:45:34.871Z",
+      "createdAt": "2026-03-25T17:45:34.871Z",
+      "role": "workflow:owner",
+      "workflowId": "quant-learning-001",
+      "projectId": "2wMuHrOZ0KpAorzn",
+      "project": {
+        "updatedAt": "2026-03-15T01:06:51.004Z",
+        "createdAt": "2026-03-15T01:05:30.851Z",
+        "id": "2wMuHrOZ0KpAorzn",
+        "name": "monday bot <a3171998@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "dc157584-5741-4a40-a086-70a91678825f"
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": {
+    "updatedAt": "2026-03-28T03:22:30.274Z",
+    "createdAt": "2026-03-28T03:22:30.274Z",
+    "versionId": "5133cc22-6178-4c7c-b53b-5b3ff4a8c91b",
+    "workflowId": "quant-learning-001",
+    "nodes": [
+      {
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "cronExpression",
+                "expression": "0 0 * * *"
+              }
+            ]
+          },
+          "options": {
+            "timezone": "America/Los_Angeles"
+          }
+        },
+        "name": "Daily Schedule",
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.2,
+        "position": [
+          -400,
+          200
+        ],
+        "id": "daily-schedule"
+      },
+      {
+        "parameters": {},
+        "name": "Manual Trigger",
+        "type": "n8n-nodes-base.manualTrigger",
+        "typeVersion": 1,
+        "position": [
+          -400,
+          0
+        ],
+        "id": "manual"
+      },
+      {
+        "parameters": {
+          "filePath": "/home/ubuntu/.n8n-files/Trading/performance/metrics.json",
+          "options": {
+            "errorHandling": "continue"
+          }
+        },
+        "name": "Load Metrics",
+        "type": "n8n-nodes-base.readBinaryFile",
+        "typeVersion": 1,
+        "position": [
+          -200,
+          200
+        ],
+        "id": "load-metrics"
+      },
+      {
+        "parameters": {
+          "filePath": "/home/ubuntu/.n8n-files/Trading/learning/patterns.json",
+          "options": {
+            "errorHandling": "continue"
+          }
+        },
+        "name": "Load Patterns",
+        "type": "n8n-nodes-base.readBinaryFile",
+        "typeVersion": 1,
+        "position": [
+          -200,
+          400
+        ],
+        "id": "load-patterns"
+      },
+      {
+        "parameters": {
+          "filePath": "/home/ubuntu/.n8n-files/Trading/positions/active.json",
+          "options": {
+            "errorHandling": "continue"
+          }
+        },
+        "name": "Load Positions",
+        "type": "n8n-nodes-base.readBinaryFile",
+        "typeVersion": 1,
+        "position": [
+          -200,
+          0
+        ],
+        "id": "load-positions"
+      },
+      {
+        "parameters": {
+          "jsCode": "// Use node references with proper defaults for missing files\nlet metrics = { \n  signals: [], \n  accuracy: { overall: 0, by_type: {} },\n  last_updated: null\n};\nlet patterns = { \n  patterns: [], \n  threshold_adjustments: {\n    rsi_oversold: 30,\n    rsi_overbought: 70,\n    volume_spike_multiplier: 1.5\n  },\n  confidence_weights: {\n    rsi: 0.40,\n    macd: 0.20,\n    volume: 0.15,\n    momentum: 0.15,\n    bollinger: 0.10\n  },\n  risk_parameters: {\n    stop_loss_pct: 6.0,\n    take_profit_pct: 8.0,\n    trailing_stop_pct: 4.0\n  }\n};\nlet positions = {};\n\ntry {\n  const metricsItem = $('Load Metrics').first();\n  if (metricsItem?.binary?.data?.data) {\n    metrics = JSON.parse(Buffer.from(metricsItem.binary.data.data, 'base64').toString('utf-8'));\n    // Ensure structure exists\n    if (!metrics.accuracy) metrics.accuracy = { overall: 0, by_type: {} };\n    if (!metrics.signals) metrics.signals = [];\n  }\n} catch (e) {\n  console.log('Metrics file not found or invalid, using defaults');\n}\n\ntry {\n  const patternsItem = $('Load Patterns').first();\n  if (patternsItem?.binary?.data?.data) {\n    patterns = JSON.parse(Buffer.from(patternsItem.binary.data.data, 'base64').toString('utf-8'));\n    // Merge with defaults\n    patterns.threshold_adjustments = { ...patterns.threshold_adjustments, ...(patterns.threshold_adjustments || {}) };\n    patterns.confidence_weights = { ...patterns.confidence_weights, ...(patterns.confidence_weights || {}) };\n  }\n} catch (e) {\n  console.log('Patterns file not found or invalid, using defaults');\n}\n\ntry {\n  const positionsItem = $('Load Positions').first();\n  if (positionsItem?.binary?.data?.data) {\n    const parsed = JSON.parse(Buffer.from(positionsItem.binary.data.data, 'base64').toString('utf-8'));\n    positions = parsed.positions || {};\n  }\n} catch (e) {\n  console.log('Positions file not found or invalid, using empty defaults');\n}\n\nreturn [{ json: { metrics, patterns, positions, timestamp: new Date().toISOString() } }];"
+        },
+        "name": "Parse Data",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          0,
+          200
+        ],
+        "id": "parse-data"
+      },
+      {
+        "parameters": {
+          "jsCode": "const input = $input.first().json;\nconst metrics = input.metrics || {};\nconst positions = input.positions || {};\nconst patterns = input.patterns || {};\nconst timestamp = input.timestamp;\n\n// Calculate signal accuracy\nconst signals = metrics.signals || [];\nconst evaluatedSignals = signals.filter(s => s.outcome && s.outcome !== 'pending');\nconst correctSignals = evaluatedSignals.filter(s => s.outcome === 'correct');\nconst overallAccuracy = evaluatedSignals.length > 0\n  ? Math.round((correctSignals.length / evaluatedSignals.length) * 100)\n  : 50;\n\n// Analyze accuracy by signal type\nconst byType = {};\nconst signalTypes = ['stop_loss', 'take_profit', 'rsi_oversold', 'rsi_overbought', 'macd_cross', 'volume_spike'];\n\nfor (const type of signalTypes) {\n  const typeSignals = signals.filter(s => \n    s.tech_reasons?.some(r => r.toLowerCase().includes(type.replace('_', ' ')))\n  );\n  const evaluated = typeSignals.filter(s => s.outcome && s.outcome !== 'pending');\n  const correct = evaluated.filter(s => s.outcome === 'correct').length;\n  \n  byType[type] = {\n    correct,\n    total: evaluated.length,\n    rate: evaluated.length > 0 ? Math.round((correct / evaluated.length) * 100) : 50\n  };\n}\n\n// Build learning summary for AI\nconst summary = [];\nsummary.push('=== LEARNING ANALYSIS ===');\nsummary.push(`Overall Signal Accuracy: ${overallAccuracy}%`);\nsummary.push(`Total Signals: ${signals.length}`);\nsummary.push(`Evaluated: ${evaluatedSignals.length}`);\nsummary.push(`Pending: ${signals.filter(s => !s.outcome || s.outcome === 'pending').length}`);\nsummary.push('');\nsummary.push('Accuracy by Type:');\nfor (const [type, data] of Object.entries(byType)) {\n  if (data.total > 0) {\n    summary.push(`  ${type}: ${data.rate}% (${data.correct}/${data.total})`);\n  }\n}\nsummary.push('');\n\n// Current thresholds\nsummary.push('Current Thresholds:');\nconst thresholds = patterns.threshold_adjustments || {};\nsummary.push(`  RSI Oversold: ${thresholds.rsi_oversold || 30}`);\nsummary.push(`  RSI Overbought: ${thresholds.rsi_overbought || 70}`);\nsummary.push(`  Volume Spike Multiplier: ${thresholds.volume_spike_multiplier || 1.5}`);\n\nreturn [{\n  json: {\n    summary: summary.join('\\n'),\n    overallAccuracy,\n    accuracyByType: byType,\n    signalCount: signals.length,\n    evaluatedCount: evaluatedSignals.length,\n    currentThresholds: thresholds,\n    signals,\n    timestamp\n  }\n}];"
+        },
+        "name": "Analyze Performance",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          200,
+          200
+        ],
+        "id": "analyze-performance"
+      },
+      {
+        "parameters": {
+          "method": "GET",
+          "url": "http://127.0.0.1:11434/api/tags",
+          "options": {
+            "timeout": 5000
+          }
+        },
+        "name": "Check Ollama Health",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          300,
+          50
+        ],
+        "id": "check-ollama-health",
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "conditions": [
+              {
+                "leftValue": "={{ $json.models }}",
+                "rightValue": "",
+                "operator": {
+                  "type": "string",
+                  "operation": "exists"
+                }
+              }
+            ]
+          }
+        },
+        "name": "Ollama Available?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2,
+        "position": [
+          500,
+          200
+        ],
+        "id": "ollama-available"
+      },
+      {
+        "parameters": {
+          "jsCode": "// Ollama unavailable - use rule-based adjustments\nconst analyzeData = $('Analyze Performance').first().json;\nconst currentThresholds = analyzeData.currentThresholds || {};\nconst accuracyByType = analyzeData.accuracyByType || {};\n\n// Rule-based adjustments (no AI)\nconst adjustments = { ...currentThresholds };\n\nfor (const [type, data] of Object.entries(accuracyByType)) {\n  if (data.total < 5) continue; // Not enough samples\n  \n  if (data.rate < 40) {\n    // Tighten threshold\n    if (type.includes('rsi_oversold')) adjustments.rsi_oversold = Math.max(20, (adjustments.rsi_oversold || 30) - 3);\n    if (type.includes('rsi_overbought')) adjustments.rsi_overbought = Math.min(80, (adjustments.rsi_overbought || 70) + 3);\n    if (type.includes('volume')) adjustments.volume_spike_multiplier = Math.min(3.0, (adjustments.volume_spike_multiplier || 1.5) + 0.2);\n  } else if (data.rate > 70) {\n    // Loosen threshold\n    if (type.includes('rsi_oversold')) adjustments.rsi_oversold = Math.min(35, (adjustments.rsi_oversold || 30) + 2);\n    if (type.includes('rsi_overbought')) adjustments.rsi_overbought = Math.max(65, (adjustments.rsi_overbought || 70) - 2);\n    if (type.includes('volume')) adjustments.volume_spike_multiplier = Math.max(1.2, (adjustments.volume_spike_multiplier || 1.5) - 0.1);\n  }\n}\n\n// Cap adjustments at \u00b120% from defaults\nconst defaults = { rsi_oversold: 30, rsi_overbought: 70, volume_spike_multiplier: 1.5 };\nfor (const key of Object.keys(adjustments)) {\n  const def = defaults[key] || adjustments[key];\n  const maxChange = def * 0.2;\n  adjustments[key] = Math.max(def - maxChange, Math.min(def + maxChange, adjustments[key]));\n}\n\nreturn [{\n  json: {\n    summary: analyzeData.summary,\n    adjustments,\n    reasoning: 'Rule-based fallback (Ollama unavailable)',\n    patternsToWatch: [],\n    patternsToAvoid: [],\n    fallbackMode: true\n  }\n}];"
+        },
+        "name": "Fallback Adjustments",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          700,
+          50
+        ],
+        "id": "fallback-adjustments"
+      },
+      {
+        "parameters": {
+          "promptType": "define",
+          "text": "={{ $json.summary }}\n\nBased on this performance data, suggest threshold adjustments to improve signal accuracy.\n\nCurrent patterns and their success rates are shown above.\n\nRules:\n1. If a signal type has < 40% accuracy, tighten the threshold (make it harder to trigger)\n2. If a signal type has > 60% accuracy, consider loosening the threshold (make it easier to trigger)\n3. For RSI: oversold threshold should be LOWER to reduce false positives; overbought should be HIGHER\n4. Volume spike multiplier should increase if too many false signals\n\nOutput ONLY valid JSON:\n{\n  \"adjustments\": {\n    \"rsi_oversold\": 25,\n    \"rsi_overbought\": 75,\n    \"volume_spike_multiplier\": 2.0\n  },\n  \"reasoning\": \"Brief explanation of why these adjustments will improve accuracy\",\n  \"patterns_to_watch\": [\"list of patterns that showed strong predictive value\"],\n  \"patterns_to_avoid\": [\"list of patterns that had poor accuracy\"]\n}",
+          "options": {
+            "systemMessage": "You are a quantitative learning engine. Analyze signal performance data and suggest threshold adjustments to improve future accuracy. Focus on data-driven decisions.\n\nBe conservative with adjustments - only suggest changes when you have statistical confidence (at least 5 samples)."
+          }
+        },
+        "name": "AI Learning Analysis",
+        "type": "@n8n/n8n-nodes-langchain.agent",
+        "typeVersion": 3.1,
+        "position": [
+          400,
+          200
+        ],
+        "id": "ai-learning"
+      },
+      {
+        "parameters": {
+          "model": "glm-5:cloud",
+          "options": {
+            "temperature": 0.3
+          }
+        },
+        "name": "GLM-5 Chat Model",
+        "type": "@n8n/n8n-nodes-langchain.lmChatOllama",
+        "typeVersion": 1,
+        "position": [
+          400,
+          350
+        ],
+        "id": "glm-model",
+        "credentials": {
+          "ollamaApi": {
+            "id": "dCTVfWIVTHlRhGsF",
+            "name": "Ollama account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "const input = $input.first().json;\nconst analyzeData = $('Analyze Performance').first().json;\nconst currentThresholds = analyzeData.currentThresholds || {};\n\n// Parse AI response\nlet adjustments = {\n  rsi_oversold: currentThresholds.rsi_oversold || 30,\n  rsi_overbought: currentThresholds.rsi_overbought || 70,\n  volume_spike_multiplier: currentThresholds.volume_spike_multiplier || 1.5\n};\nlet reasoning = '';\nlet patternsToWatch = [];\nlet patternsToAvoid = [];\n\ntry {\n  const aiText = input.output || input.text || '';\n  const jsonMatch = aiText.match(/\\{[\\s\\S]*\\}/);\n  if (jsonMatch) {\n    const parsed = JSON.parse(jsonMatch[0]);\n    if (parsed.adjustments) {\n      adjustments = {\n        rsi_oversold: parsed.adjustments.rsi_oversold || adjustments.rsi_oversold,\n        rsi_overbought: parsed.adjustments.rsi_overbought || adjustments.rsi_overbought,\n        volume_spike_multiplier: parsed.adjustments.volume_spike_multiplier || adjustments.volume_spike_multiplier\n      };\n    }\n    reasoning = parsed.reasoning || '';\n    patternsToWatch = parsed.patterns_to_watch || [];\n    patternsToAvoid = parsed.patterns_to_avoid || [];\n  }\n} catch (e) {\n  // Keep defaults if AI response parsing fails\n}\n\n// Preserve signal history from Parse Data\nconst parseData = $('Parse Data').first().json;\n\n// Build updated metrics\nconst updatedMetrics = {\n  signals: parseData.metrics.signals || [],\n  accuracy: {\n    overall: analyzeData.overallAccuracy,\n    by_type: analyzeData.accuracyByType\n  },\n  last_updated: analyzeData.timestamp\n};\n\n// Build updated patterns\nconst updatedPatterns = {\n  patterns: [\n    {\n      name: 'rsi_oversold_bounce',\n      conditions: ['rsi_14 < ' + adjustments.rsi_oversold, 'volume > avg_volume'],\n      action: 'buy',\n      success_rate: (analyzeData.accuracyByType?.rsi_oversold?.rate || 50) / 100,\n      samples: analyzeData.accuracyByType?.rsi_oversold?.total || 0\n    },\n    {\n      name: 'rsi_overbought_reversal',\n      conditions: ['rsi_14 > ' + adjustments.rsi_overbought, 'volume > avg_volume'],\n      action: 'sell',\n      success_rate: (analyzeData.accuracyByType?.rsi_overbought?.rate || 50) / 100,\n      samples: analyzeData.accuracyByType?.rsi_overbought?.total || 0\n    }\n  ],\n  threshold_adjustments: adjustments,\n  patterns_to_watch: patternsToWatch,\n  patterns_to_avoid: patternsToAvoid,\n  reasoning: reasoning,\n  last_updated: analyzeData.timestamp\n};\n\n// Create binary data for file writing\nconst metricsBinary = Buffer.from(JSON.stringify(updatedMetrics, null, 2)).toString('base64');\nconst patternsBinary = Buffer.from(JSON.stringify(updatedPatterns, null, 2)).toString('base64');\n\nreturn [{\n  json: {\n    metrics: updatedMetrics,\n    patterns: updatedPatterns,\n    summary: {\n      accuracy: analyzeData.overallAccuracy + '%',\n      signals_analyzed: analyzeData.evaluatedCount,\n      threshold_changes: JSON.stringify(adjustments),\n      reasoning: reasoning\n    }\n  },\n  binary: {\n    metrics_data: {\n      data: metricsBinary,\n      mimeType: 'application/json',\n      fileName: 'metrics.json'\n    },\n    patterns_data: {\n      data: patternsBinary,\n      mimeType: 'application/json',\n      fileName: 'patterns.json'\n    }\n  }\n}];"
+        },
+        "name": "Apply Learning",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          600,
+          200
+        ],
+        "id": "apply-learning"
+      },
+      {
+        "parameters": {
+          "fileName": "/home/ubuntu/.n8n-files/Trading/performance/metrics.json",
+          "dataPropertyName": "metrics_data",
+          "options": {}
+        },
+        "name": "Save Metrics",
+        "type": "n8n-nodes-base.writeBinaryFile",
+        "typeVersion": 1,
+        "position": [
+          800,
+          100
+        ],
+        "id": "save-metrics"
+      },
+      {
+        "parameters": {
+          "fileName": "/home/ubuntu/.n8n-files/Trading/learning/patterns.json",
+          "dataPropertyName": "patterns_data",
+          "options": {}
+        },
+        "name": "Save Patterns",
+        "type": "n8n-nodes-base.writeBinaryFile",
+        "typeVersion": 1,
+        "position": [
+          800,
+          300
+        ],
+        "id": "save-patterns"
+      },
+      {
+        "parameters": {
+          "resource": "message",
+          "guildId": {
+            "mode": "id",
+            "value": "1204113877139198042"
+          },
+          "channelId": {
+            "mode": "id",
+            "value": "1479570494385684603"
+          },
+          "content": "={{ '**Daily Learning Update**\\n\\nTotal signals: ' + $json.summary.total_signals + '\\nSignals evaluated: ' + $json.summary.signals_analyzed + '\\nOverall accuracy: ' + $json.summary.accuracy + '\\nThreshold adjustments: ' + $json.summary.threshold_changes + '\\n\\n_' + $json.summary.reasoning + '_' }}",
+          "options": {}
+        },
+        "name": "Discord Notification",
+        "type": "n8n-nodes-base.discord",
+        "typeVersion": 2,
+        "position": [
+          1000,
+          200
+        ],
+        "id": "discord",
+        "credentials": {
+          "discordBotApi": {
+            "id": "ZDMFOE75AzwAAVO3",
+            "name": "Discord Bot account"
+          }
+        }
+      }
+    ],
+    "connections": {
+      "Daily Schedule": {
+        "main": [
+          [
+            {
+              "node": "Load Positions",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Manual Trigger": {
+        "main": [
+          [
+            {
+              "node": "Load Positions",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Load Positions": {
+        "main": [
+          [
+            {
+              "node": "Load Metrics",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Load Metrics": {
+        "main": [
+          [
+            {
+              "node": "Load Patterns",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Load Patterns": {
+        "main": [
+          [
+            {
+              "node": "Parse Data",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Parse Data": {
+        "main": [
+          [
+            {
+              "node": "Analyze Performance",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Analyze Performance": {
+        "main": [
+          [
+            {
+              "node": "Check Ollama Health",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "AI Learning Analysis": {
+        "main": [
+          [
+            {
+              "node": "Apply Learning",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Apply Learning": {
+        "main": [
+          [
+            {
+              "node": "Save Metrics",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Save Patterns",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Discord Notification",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "GLM-5 Chat Model": {
+        "ai_languageModel": [
+          [
+            {
+              "node": "AI Learning Analysis",
+              "type": "ai_languageModel",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Check Ollama Health": {
+        "main": [
+          [
+            {
+              "node": "Ollama Available?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Ollama Available?": {
+        "main": [
+          [
+            {
+              "node": "AI Learning Analysis",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Fallback Adjustments",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Fallback Adjustments": {
+        "main": [
+          [
+            {
+              "node": "Apply Learning",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "authors": "monday bot",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2026-03-28T03:22:30.337Z",
+        "id": 165,
+        "workflowId": "quant-learning-001",
+        "versionId": "5133cc22-6178-4c7c-b53b-5b3ff4a8c91b",
+        "event": "activated",
+        "userId": "dc157584-5741-4a40-a086-70a91678825f"
+      },
+      {
+        "createdAt": "2026-04-02T00:42:13.305Z",
+        "id": 182,
+        "workflowId": "quant-learning-001",
+        "versionId": "5133cc22-6178-4c7c-b53b-5b3ff4a8c91b",
+        "event": "activated",
+        "userId": "dc157584-5741-4a40-a086-70a91678825f"
+      },
+      {
+        "createdAt": "2026-03-28T03:22:30.316Z",
+        "id": 164,
+        "workflowId": "quant-learning-001",
+        "versionId": "5133cc22-6178-4c7c-b53b-5b3ff4a8c91b",
+        "event": "deactivated",
+        "userId": "dc157584-5741-4a40-a086-70a91678825f"
+      },
+      {
+        "createdAt": "2026-03-31T03:21:35.636Z",
+        "id": 167,
+        "workflowId": "quant-learning-001",
+        "versionId": "5133cc22-6178-4c7c-b53b-5b3ff4a8c91b",
+        "event": "deactivated",
+        "userId": "dc157584-5741-4a40-a086-70a91678825f"
+      },
+      {
+        "createdAt": "2026-04-02T00:42:13.257Z",
+        "id": 181,
+        "workflowId": "quant-learning-001",
+        "versionId": "5133cc22-6178-4c7c-b53b-5b3ff4a8c91b",
+        "event": "deactivated",
+        "userId": "dc157584-5741-4a40-a086-70a91678825f"
+      }
+    ]
+  }
+}

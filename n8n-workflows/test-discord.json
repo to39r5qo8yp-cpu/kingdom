@@ -1,0 +1,61 @@
+{
+  "id": "test-discord-001",
+  "name": "Test Discord Alert",
+  "active": true,
+  "nodes": [
+    {
+      "parameters": {},
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "trigger"
+    },
+    {
+      "parameters": {
+        "content": "\ud83e\uddea Test alert from n8n trading system - workflows are now working!",
+        "guildId": {
+          "mode": "id",
+          "value": "1204113877139198042"
+        },
+        "channelId": {
+          "mode": "id",
+          "value": "1479570494385684603"
+        }
+      },
+      "name": "Send Discord Message",
+      "type": "n8n-nodes-base.discord",
+      "typeVersion": 2,
+      "position": [
+        200,
+        0
+      ],
+      "id": "discord",
+      "credentials": {
+        "discordBotApi": {
+          "id": "ZDMFOE75AzwAAVO3",
+          "name": "Discord Bot account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Send Discord Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

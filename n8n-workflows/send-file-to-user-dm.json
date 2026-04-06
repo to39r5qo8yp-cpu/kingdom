@@ -1,0 +1,134 @@
+{
+  "updatedAt": "2026-04-02T21:59:35.194Z",
+  "createdAt": "2026-04-02T21:59:35.194Z",
+  "id": "ruZFL3bOqTU2pTR8",
+  "name": "Send File to User DM",
+  "description": null,
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "send-file",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "send-file-webhook"
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "sendTo": "user",
+        "userId": {
+          "mode": "id",
+          "value": "97574541315813376"
+        },
+        "content": "={{ $json.message || 'Here is the file you requested:' }}",
+        "files": {
+          "values": [
+            {
+              "inputFieldName": "file"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "discord-send",
+      "name": "Send Discord DM",
+      "type": "n8n-nodes-base.discord",
+      "typeVersion": 2,
+      "position": [
+        250,
+        0
+      ],
+      "credentials": {
+        "discordBotApi": {
+          "id": "ZDMFOE75AzwAAVO3",
+          "name": "Discord Bot account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"success\": true, \"message\": \"File sent to user DM\" } }}",
+        "options": {}
+      },
+      "id": "respond-webhook",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        500,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Send Discord DM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Discord DM": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": null,
+  "versionId": "0863c227-4492-4630-bbfa-8c43c2992b3c",
+  "activeVersionId": null,
+  "versionCounter": 1,
+  "triggerCount": 0,
+  "shared": [
+    {
+      "updatedAt": "2026-04-02T21:59:35.200Z",
+      "createdAt": "2026-04-02T21:59:35.200Z",
+      "role": "workflow:owner",
+      "workflowId": "ruZFL3bOqTU2pTR8",
+      "projectId": "2wMuHrOZ0KpAorzn",
+      "project": {
+        "updatedAt": "2026-03-15T01:06:51.004Z",
+        "createdAt": "2026-03-15T01:05:30.851Z",
+        "id": "2wMuHrOZ0KpAorzn",
+        "name": "monday bot <a3171998@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "dc157584-5741-4a40-a086-70a91678825f"
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": null
+}

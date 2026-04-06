@@ -1,132 +1,110 @@
 # n8n Workflows
 
-This directory contains all n8n workflow definitions exported from the self-hosted n8n instance (Oracle Cloud, port 5678).
+Production n8n workflows for the AI consulting business.
 
-## Workflow Index
+## Directory Structure
 
-| File | Name | Status | Trigger |
-|------|------|--------|---------|
-| [calendar-bot.json](calendar-bot.json) | Calendar Bot | Active | Every 30 min |
-| [calendar-notifier.json](calendar-notifier.json) | Calendar Notifier | Active | Every hour |
-| [daily-news-brief.json](daily-news-brief.json) | Daily News Brief | Active | Daily 6AM PDT |
-| [email-monitor.json](email-monitor.json) | Email Monitor with AI Categorization | Active | Gmail (new unread emails) |
-| [test-ai-agent.json](test-ai-agent.json) | Test AI Agent | Inactive | Manual |
+```
+n8n-workflows/
+├── README.md                    # This file
+├── enforce-timezones.sh         # Timezone enforcement script
+├── trigger-workflow.sh          # Manual workflow trigger
+├── email-monitor.json           # Email triage + AI categorization
+├── daily-news-brief.json        # Daily news aggregation
+├── health-check.json            # System health monitoring
+├── error-handler-global.json    # Global error handling
+├── trading-signals.json         # Trading signal generation
+├── trading-monitor.json         # Portfolio analysis
+├── quant-analyst-core.json      # Quantitative analysis
+├── quant-learning.json          # ML parameter optimization
+├── job-search.json              # Job listing scraper
+└── test-discord.json            # Discord testing
+```
 
----
+## Workflow Categories
 
-## Calendar Bot
+### Production Workflows (Active)
 
-**File:** `calendar-bot.json`
-**Status:** Active
-**Trigger:** Schedule — every 30 minutes
+| Workflow | Purpose | Status | Reusable For |
+|----------|---------|--------|--------------|
+| email-monitor.json | Email triage + AI categorization | Active | **High - Email Triage template** |
+| daily-news-brief.json | Daily news aggregation | Active | Medium - Reporting template |
+| health-check.json | System health monitoring | Active | Low - Internal use |
+| error-handler-global.json | Global error handling | Active | **High - Every project needs this** |
+| trading-signals.json | Trading signal generation | Active | Low - Niche |
+| trading-monitor.json | Portfolio analysis | Active | Low - Niche |
+| quant-analyst-core.json | Quantitative analysis | Active | Low - Niche |
+| quant-learning.json | ML parameter optimization | Active | Low - Niche |
 
-Monitors a Discord channel for calendar-related commands, uses Ollama AI to parse intent, and creates or deletes Google Calendar events based on user messages.
+### Development/Test Workflows
 
-**Flow:**
-1. Poll Discord channel for new messages
-2. Filter out bot messages and already-processed messages
-3. Build prompt and send to Ollama for intent parsing
-4. Route by intent: `create` or `delete`
-5. **Create:** prepare fields → create Google Calendar event → confirm in Discord
-6. **Delete:** search Google Calendar → check match count → delete event → confirm in Discord (or reply with multiple matches / not found)
+| Workflow | Purpose | Status |
+|----------|---------|--------|
+| test-discord.json | Discord testing | Development |
+| job-search.json | Job listing scraper | Inactive |
 
-**Credentials required:**
-- Discord Bot
-- Google Calendar (OAuth2)
-- Ollama (local)
+## Template Extraction
 
----
+Production-ready templates are extracted to `ai-consulting/templates/workflows/`:
 
-## Calendar Notifier
+| Template | Source | Status |
+|----------|--------|--------|
+| email-triage-template.json | email-monitor.json | Ready |
+| error-handler-template.json | error-handler-global.json | TODO |
+| daily-brief-template.json | daily-news-brief.json | TODO |
+| webhook-integration-template.json | trading-signals.json | TODO |
 
-**File:** `calendar-notifier.json`
-**Status:** Active
-**Trigger:** Schedule — every hour
+## Adding New Workflows
 
-Polls Google Calendar for events starting within the next hour and sends a Discord alert for any not yet notified. Tracks notified event IDs in workflow static data to avoid duplicate alerts.
+1. Design workflow in n8n interface
+2. Test thoroughly
+3. Export to JSON file:
+   ```bash
+   # Via n8n API
+   curl -s "http://localhost:5678/api/v1/workflows/{id}" \
+     -H "X-N8N-API-KEY: $N8N_API_KEY" > workflow-name.json
+   ```
+4. Add to this directory
+5. Document in README
+6. Consider extracting template for reuse
 
-**Flow:**
-1. Fetch upcoming events (next 60 min) from primary Google Calendar
-2. Filter out already-notified event IDs
-3. Format message: `📅 Starting soon: **{title}** at {time}`
-4. Send Discord alert
-5. Save event ID to static data
+## Workflow Variables
 
-**Credentials required:**
-- Google Calendar (OAuth2)
-- Discord Bot
+When extracting templates, replace:
 
----
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `{{CLIENT_NAME}}` | Client identifier | `acme-corp` |
+| `{{CLIENT_GUILD_ID}}` | Discord server ID | `1234567890` |
+| `{{CLIENT_CHANNEL_ID}}` | Discord channel ID | `1234567890` |
+| `{{CLIENT_CREDENTIALS}}` | n8n credential ID | `abc123` |
+| `{{AI_MODEL}}` | Ollama model name | `glm-5:cloud` |
+| `{{CATEGORIES}}` | Email categories | `urgent,sales,support` |
 
-## Daily News Brief
+## Credential Management
 
-**File:** `daily-news-brief.json`
-**Status:** Active
-**Trigger:** Schedule — every 24 hours (6AM PDT); also supports manual trigger
+**NEVER commit credentials.** Store credentials in:
+- n8n credential store (production)
+- `ai-consulting/clients/{client}/credentials.md` (reference only, no secrets)
+- Environment variables (development)
 
-Fetches headlines from BBC, Investing.com, and Crypto news sources, combines them, summarizes via Ollama AI, and posts a formatted brief to Discord.
+## Backup Strategy
 
-**Flow:**
-1. Fetch articles from BBC, Investing.com, Crypto (parallel HTTP requests)
-2. Merge all sources and prepare article list
-3. AI Agent (Ollama) summarizes into a news brief
-4. Format and send to Discord
+Workflows are backed up automatically by n8n. Manual backups:
+```bash
+# Backup all workflows
+cp ~/.n8n/workflows/*.json ~/n8n-workflows/backups/$(date +%Y-%m-%d)/
+```
 
-**Credentials required:**
-- Discord Bot
-- Ollama (local)
+## Testing
 
----
-
-## Email Monitor with AI Categorization
-
-**File:** `email-monitor.json`
-**Status:** Active
-**Trigger:** Gmail Trigger (polls for new unread emails, marks as read)
-
-Monitors Gmail for new unread emails, uses Ollama AI to categorize and summarize them, and sends relevant notifications to Discord. The original IMAP trigger is disabled but preserved.
-
-**Flow:**
-1. Gmail Trigger fires on new unread email
-2. Mark email as read (Gmail action node)
-3. Prepare email data (extract subject, sender, body)
-4. AI Agent (Ollama) categorizes and summarizes the email
-5. Process & filter response (applies category rules)
-6. Send Discord notification for qualifying emails
-
-**Nodes:**
-- `Gmail Trigger` — active trigger (OAuth2, polls unread)
-- `Email Trigger (IMAP)` — disabled (preserved for reference)
-- `Mark As Read` — marks message as read via Gmail API
-
-**Credentials required:**
-- Gmail (OAuth2)
-- Discord Bot
-- Ollama (local)
-
----
-
-## Test AI Agent
-
-**File:** `test-ai-agent.json`
-**Status:** Inactive (manual only)
-
-Basic AI agent test workflow used for validating Ollama connectivity and agent behavior.
-
-**Flow:**
-1. Manual trigger
-2. Prepare input
-3. AI Agent (Ollama)
-
-**Credentials required:**
-- Ollama (local)
+Test workflows before deploying:
+1. Use manual trigger
+2. Test with sample data
+3. Verify all destinations
+4. Check error handling
+5. Test with edge cases
 
 ---
 
-## Importing a Workflow
-
-To import any of these workflows into n8n:
-1. Open n8n editor → **Workflows** → **Import from file**
-2. Select the JSON file
-3. Re-link credentials (IDs are instance-specific)
-4. Activate the workflow
+*Last updated: April 2026*

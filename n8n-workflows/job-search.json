@@ -1,0 +1,1712 @@
+{
+  "updatedAt": "2026-04-02T00:42:12.989Z",
+  "createdAt": "2026-03-18T03:33:13.795Z",
+  "id": "PjGsqBwbj30YlMoM",
+  "name": "Job Search",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 5
+            }
+          ]
+        }
+      },
+      "id": "sched-poll",
+      "name": "Poll Every Minute",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        240,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "getAll",
+        "guildId": {
+          "mode": "id",
+          "value": "1204113877139198042"
+        },
+        "channelId": {
+          "mode": "id",
+          "value": "1481657700248191107"
+        },
+        "limit": 10,
+        "options": {}
+      },
+      "id": "discord-get-msgs",
+      "name": "Fetch Discord Messages",
+      "type": "n8n-nodes-base.discord",
+      "typeVersion": 2,
+      "position": [
+        464,
+        464
+      ],
+      "webhookId": "fe959cdc-5aed-460b-b9cb-c0372cf2385d",
+      "credentials": {
+        "discordBotApi": {
+          "id": "ZDMFOE75AzwAAVO3",
+          "name": "Discord Bot account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const staticData = $getWorkflowStaticData('global');\nif (!staticData.jobLastMsgId) staticData.jobLastMsgId = '0';\n\nconst messages = $input.all().map(i => i.json);\nconst newMsgs = messages.filter(m => m.id && BigInt(m.id) > BigInt(staticData.jobLastMsgId));\n\nif (newMsgs.length === 0) return [];\n\nconst newestId = newMsgs.reduce(\n  (max, m) => BigInt(m.id) > BigInt(max) ? m.id : max,\n  staticData.jobLastMsgId\n);\nstaticData.jobLastMsgId = newestId;\n\nreturn newMsgs\n  .reverse()\n  .filter(m => m.content && m.content.trim().startsWith('!jobs'))\n  .map(m => ({ json: m }));"
+      },
+      "id": "code-filter-jobs",
+      "name": "Filter New !jobs Messages",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        688,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "bot-check",
+              "leftValue": "={{ $json.author?.bot }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-bot",
+      "name": "Skip Bot Messages",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        912,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const content  = $json.content  || '';\nconst authorId = $json.author?.id || 'unknown';\n\n// \u2500\u2500\u2500 Defaults: edit these to change your preferences \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\nconst DEFAULT_TITLES     = ['Data Scientist', 'ML Engineer', 'AI Engineer', 'Data Analyst'];\nconst DEFAULT_LIMIT      = 25;\nconst DEFAULT_SITES      = 'linkedin';\nconst RESUME_PATH        = '/home/ubuntu/resume.pdf';\nconst SCRAPER_PATH       = '/home/ubuntu/job-scraper/scraper.py';\nconst OLLAMA_MODEL       = 'llama3.2:latest';\nconst OLLAMA_URL         = 'http://localhost:11434/api/chat';\nconst SKILLS_MATCH_MIN   = 40;\nconst INTENT_MIN         = 6;\n// \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n\nconst params = {\n  authorId,\n  titles:          [...DEFAULT_TITLES],\n  remote:          true,\n  hybrid:          true,\n  onsite:          false,\n  city:            '',\n  limit:           DEFAULT_LIMIT,\n  sites:           DEFAULT_SITES,\n  resumePath:      RESUME_PATH,\n  scraperPath:     SCRAPER_PATH,\n  ollamaModel:     OLLAMA_MODEL,\n  ollamaUrl:       OLLAMA_URL,\n  skillsMatchMin:  SKILLS_MATCH_MIN,\n  intentToHireMin: INTENT_MIN,\n  adzunaAppId:     '',\n  adzunaApiKey:    '',\n};\n\nconst args = content.slice('!jobs'.length).trim();\nlet remainder = args;\n\n// Extract quoted title: !jobs \"Senior Data Scientist\" --remote\nconst quotedMatch = args.match(/^\"([^\"]+)\"/);\nif (quotedMatch) {\n  params.titles = [quotedMatch[1]];\n  remainder = args.slice(quotedMatch[0].length).trim();\n} else {\n  const firstFlagIdx = remainder.indexOf('--');\n  if (firstFlagIdx > 0) {\n    const possibleTitle = remainder.slice(0, firstFlagIdx).trim();\n    if (possibleTitle) { params.titles = [possibleTitle]; remainder = remainder.slice(firstFlagIdx); }\n  } else if (remainder.length > 0 && !remainder.startsWith('--')) {\n    params.titles = [remainder];\n    remainder = '';\n  }\n}\n\n// Parse --flag and --flag=value pairs\nconst flagMatches = remainder.match(/--[\\w-]+(?:=[^\\s]+)?/g) || [];\nfor (const flag of flagMatches) {\n  const eqIdx = flag.indexOf('=');\n  const key   = eqIdx >= 0 ? flag.slice(2, eqIdx) : flag.slice(2);\n  const val   = eqIdx >= 0 ? flag.slice(eqIdx + 1) : '';\n  switch (key) {\n    case 'remote':    params.remote = true;  break;\n    case 'hybrid':    params.hybrid = true;  break;\n    case 'onsite':    params.onsite = true;  break;\n    case 'no-remote': params.remote = false; break;\n    case 'no-hybrid': params.hybrid = false; break;\n    case 'city':      params.city   = val;   break;\n    case 'limit':     params.limit  = Math.min(50, parseInt(val) || DEFAULT_LIMIT); break;\n    case 'sites':     params.sites  = val;   break;\n  }\n}\n\nconst titleArg = params.titles.join(' OR ');\nlet cliArgs = `--title \"${titleArg}\" --sites \"${params.sites}\" --limit ${params.limit}`;\nif (params.remote) cliArgs += ' --remote';\nif (params.hybrid) cliArgs += ' --hybrid';\nif (params.onsite) cliArgs += ' --onsite';\nif (params.city)   cliArgs += ` --city \"${params.city}\"`;\nif (params.adzunaAppId)  cliArgs += ` --adzuna-app-id \"${params.adzunaAppId}\"`;\nif (params.adzunaApiKey) cliArgs += ` --adzuna-api-key \"${params.adzunaApiKey}\"`;\nparams.scraperCliArgs = cliArgs;\n\nreturn [{ json: params }];"
+      },
+      "id": "code-parse-cmd",
+      "name": "Parse Command",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3457/extract-pdf",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ path: $json.resumePath }) }}",
+        "options": {}
+      },
+      "id": "http-extract-pdf",
+      "name": "Extract Resume Text",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1344,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const staticData = $getWorkflowStaticData('global');\nconst params     = $('Parse Command').first().json;\nconst stdout     = $json.text || '';\n\nif (!stdout || stdout.trim().length < 50) {\n  if (staticData.cachedResumeText) {\n    return [{ json: { ...params, resumeText: staticData.cachedResumeText, resumeFromCache: true } }];\n  }\n  return [{ json: { ...params, resumeText: '(resume unavailable \u2014 check /home/ubuntu/resume.pdf)', resumeError: true } }];\n}\n\nconst resumeText = stdout.trim().slice(0, 4000);\nstaticData.cachedResumeText = resumeText;\n\nreturn [{ json: { ...params, resumeText } }];"
+      },
+      "id": "code-cache-resume",
+      "name": "Cache Resume Text",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1568,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3457/scrape",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  title:        $json.titles ? $json.titles.join(' OR ') : 'Data Scientist',\n  sites:        $json.sites,\n  limit:        $json.limit,\n  remote:       $json.remote,\n  hybrid:       $json.hybrid,\n  onsite:       $json.onsite,\n  city:         $json.city || '',\n  adzunaAppId:  $json.adzunaAppId  || '',\n  adzunaApiKey: $json.adzunaApiKey || ''\n}) }}",
+        "options": {
+          "timeout": 370000
+        }
+      },
+      "id": "http-run-scraper",
+      "name": "Run Scraper",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1792,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const params   = $('Cache Resume Text').first().json;\nconst response = $json;   // { jobs, count, error } from job-scraper service\n\nif (response.error) {\n  return [{ json: { ...params, scraperError: true, scraperErrorMsg: String(response.error).slice(0, 500), jobs: [] } }];\n}\n\nconst jobs = response.jobs || [];\nif (!Array.isArray(jobs)) {\n  return [{ json: { ...params, scraperError: true, scraperErrorMsg: 'Service returned non-array jobs', jobs: [] } }];\n}\n\nreturn [{ json: { ...params, scraperError: false, jobs, totalFound: jobs.length } }];"
+      },
+      "id": "code-parse-scraper",
+      "name": "Parse Scraper Output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2000,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "id": "scraper-err-check",
+              "leftValue": "={{ $json.scraperError }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "if-scraper-error",
+      "name": "Scraper Error?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2224,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "guildId": {
+          "mode": "id",
+          "value": "1204113877139198042"
+        },
+        "channelId": {
+          "mode": "id",
+          "value": "1481657700248191107"
+        },
+        "content": "={{ '\u274c Job scraper failed: ' + ($json.scraperErrorMsg || 'unknown error') }}",
+        "options": {}
+      },
+      "id": "discord-send-err",
+      "name": "Send Scraper Error",
+      "type": "n8n-nodes-base.discord",
+      "typeVersion": 2,
+      "position": [
+        2448,
+        240
+      ],
+      "webhookId": "17ee3be8-1082-427f-84ed-e96c0a26e46f",
+      "credentials": {
+        "discordBotApi": {
+          "id": "ZDMFOE75AzwAAVO3",
+          "name": "Discord Bot account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const staticData = $getWorkflowStaticData('global');\nif (!staticData.seenJobIds) staticData.seenJobIds = [];\n\nconst jobs   = $json.jobs || [];\nconst params = { ...$json };\ndelete params.jobs;\n\nconst newJobs = jobs.filter(job => !staticData.seenJobIds.includes(job.id));\n\nif (newJobs.length === 0) {\n  return [{ json: { ...params, noNewJobs: true, newJobs: [], newCount: 0 } }];\n}\n\nreturn [{ json: { ...params, noNewJobs: false, newJobs, newCount: newJobs.length } }];"
+      },
+      "id": "code-dedup",
+      "name": "Deduplicate Jobs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2448,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "id": "no-new-check",
+              "leftValue": "={{ $json.noNewJobs }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "if-no-new",
+      "name": "No New Jobs?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2672,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "guildId": {
+          "mode": "id",
+          "value": "1204113877139198042"
+        },
+        "channelId": {
+          "mode": "id",
+          "value": "1481657700248191107"
+        },
+        "content": "={{ '\u2728 No new listings since last run (' + $json.totalFound + ' jobs found, all previously seen)' }}",
+        "options": {}
+      },
+      "id": "discord-no-new",
+      "name": "Send No New Jobs",
+      "type": "n8n-nodes-base.discord",
+      "typeVersion": 2,
+      "position": [
+        2880,
+        272
+      ],
+      "webhookId": "4f8cf02c-9f89-439b-a0be-5ea5c978280e",
+      "credentials": {
+        "discordBotApi": {
+          "id": "ZDMFOE75AzwAAVO3",
+          "name": "Discord Bot account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "guildId": {
+          "mode": "id",
+          "value": "1204113877139198042"
+        },
+        "channelId": {
+          "mode": "id",
+          "value": "1481657700248191107"
+        },
+        "content": "={{ '\ud83d\udd0d Found **' + $json.newCount + '** new job' + ($json.newCount === 1 ? '' : 's') + ' to analyze with AI...' }}",
+        "options": {}
+      },
+      "id": "discord-ack",
+      "name": "Send Acknowledgment",
+      "type": "n8n-nodes-base.discord",
+      "typeVersion": 2,
+      "position": [
+        2880,
+        464
+      ],
+      "webhookId": "e8d91119-e79d-419e-8408-af2ade6b1ff1",
+      "credentials": {
+        "discordBotApi": {
+          "id": "ZDMFOE75AzwAAVO3",
+          "name": "Discord Bot account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $('Deduplicate Jobs').first().json;\nconst { newJobs = [], resumeText, ollamaModel, ollamaUrl, skillsMatchMin, intentToHireMin } = data;\n\nif (newJobs.length === 0) return [];\n\nreturn newJobs.map(job => ({\n  json: { resumeText, ollamaModel, ollamaUrl, skillsMatchMin, intentToHireMin, job }\n}));"
+      },
+      "id": "code-split-jobs",
+      "name": "Split Jobs Array",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3104,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const { resumeText, job } = $json;\n\nconst prompt = `You are a job application evaluator. Analyze this job posting against the candidate's resume and return ONLY valid JSON \u2014 no explanation, no markdown.\n\nRESUME:\n${resumeText}\n\nJOB POSTING:\nTitle: ${job.title}\nCompany: ${job.company}\nLocation: ${job.location} (${job.remote_type})\nSalary: ${job.salary || 'Not specified'}\nDescription: ${job.description}\n\nReturn this exact JSON structure:\n{\n  \"intent_to_hire_score\": <integer 1-10, 10 = clearly targeting this exact profile>,\n  \"skills_match_percent\": <integer 0-100, only required/strongly-preferred skills>,\n  \"salary_fit\": <\"good\" | \"below_expectations\" | \"above_expectations\" | \"unknown\">,\n  \"red_flags\": [<up to 3 strings, empty array if none>],\n  \"strengths\": [<2-3 specific resume-to-job matches>],\n  \"summary\": \"<2-3 sentence honest assessment of fit>\"\n}\n\nScoring guidance:\n- intent_to_hire_score: Deduct for vague JD, missing company name, unrealistic requirements. Add for specific team info, clear requirements, salary listed.\n- red_flags: Vague role, required degree not on resume, key tools not on resume, suspiciously generic JD, possible ghost job.`;\n\nreturn [{ json: { ...$json, ollamaPrompt: prompt } }];"
+      },
+      "id": "code-build-prompt",
+      "name": "Build Ollama Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3328,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.ollamaUrl }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: $json.ollamaModel, messages: [{ role: \"user\", content: $json.ollamaPrompt }], stream: false, format: \"json\" }) }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "http-ollama",
+      "name": "Call Ollama",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3552,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const rawContent = $json.message?.content || $json.choices?.[0]?.message?.content || '';\n\nlet ev;\ntry {\n  ev = typeof rawContent === 'string' ? JSON.parse(rawContent) : rawContent;\n} catch (e) {\n  ev = {\n    intent_to_hire_score: 5,\n    skills_match_percent: 50,\n    salary_fit:   'unknown',\n    red_flags:    [],\n    strengths:    ['(AI parse failed \u2014 heuristic fallback)'],\n    summary:      'Ollama response could not be parsed. Flagged for manual review.',\n    _fallback:    true,\n  };\n}\n\nconst validFits = ['good', 'below_expectations', 'above_expectations', 'unknown'];\nconst evaluation = {\n  intent_to_hire_score: Math.min(10, Math.max(1, parseInt(ev.intent_to_hire_score) || 5)),\n  skills_match_percent: Math.min(100, Math.max(0, parseInt(ev.skills_match_percent) || 50)),\n  salary_fit:           validFits.includes(ev.salary_fit) ? ev.salary_fit : 'unknown',\n  red_flags:            Array.isArray(ev.red_flags) ? ev.red_flags.slice(0, 3) : [],\n  strengths:            Array.isArray(ev.strengths) ? ev.strengths.slice(0, 3) : [],\n  summary:              String(ev.summary || '').slice(0, 600),\n  _fallback:            ev._fallback || false,\n};\n\nconst { ollamaPrompt, ...rest } = $json;\nreturn [{ json: { ...rest, evaluation } }];"
+      },
+      "id": "code-parse-ollama",
+      "name": "Parse Ollama Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3760,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combineOperation": "all",
+          "conditions": [
+            {
+              "id": "intent-check",
+              "leftValue": "={{ $json.evaluation.intent_to_hire_score }}",
+              "rightValue": "={{ $json.intentToHireMin }}",
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
+            },
+            {
+              "id": "skills-check",
+              "leftValue": "={{ $json.evaluation.skills_match_percent }}",
+              "rightValue": "={{ $json.skillsMatchMin }}",
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "if-score",
+      "name": "Score Filter",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        3984,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const { job, evaluation: ev } = $json;\nconst skills = ev.skills_match_percent;\n\nconst color = skills >= 70 ? 0x57F287 : skills >= 40 ? 0xFEE75C : 0xE67E22;\n\nconst salaryEmoji = { good: '\u2705', below_expectations: '\u2b07\ufe0f', above_expectations: '\u2b06\ufe0f', unknown: '\u2753' }[ev.salary_fit] || '\u2753';\nconst remoteEmoji = { remote: '\ud83c\udfe0', hybrid: '\ud83d\udd00', onsite: '\ud83c\udfe2', unknown: '\ud83d\udccd' }[job.remote_type] || '\ud83d\udccd';\nconst sourceLabel = { linkedin: 'LinkedIn', indeed: 'Indeed', adzuna: 'Adzuna' }[job.source] || job.source;\n\nconst embed = {\n  title: `${job.title} @ ${job.company}`.slice(0, 256),\n  url:   job.url,\n  color,\n  fields: [\n    { name: '\ud83d\udccd Location',    value: `${job.location || 'Not specified'} ${remoteEmoji} \\`${job.remote_type}\\``,               inline: true  },\n    { name: '\ud83d\udcb0 Salary',      value: `${salaryEmoji} ${job.salary || 'Not listed'} *(${ev.salary_fit})*`,                      inline: true  },\n    { name: '\ud83c\udfaf Skills Match',value: `**${skills}%**`,                                                                          inline: true  },\n    { name: '\ud83e\udd1d Hiring Intent',value: `**${ev.intent_to_hire_score}/10**`,                                                     inline: true  },\n    { name: '\u2728 Strengths',   value: ev.strengths.length > 0 ? ev.strengths.map(s => `\u2022 ${s}`).join('\\n') : '*None identified*', inline: false },\n    { name: '\u26a0\ufe0f Red Flags',   value: ev.red_flags.length  > 0 ? ev.red_flags.map(f => `\u2022 ${f}`).join('\\n')  : '*None detected*',  inline: false },\n    { name: '\ud83e\udd16 AI Assessment',value: ev.summary || '*No summary available*',                                                  inline: false },\n  ],\n  footer: {\n    text: `${sourceLabel}${job.posted_date ? ' \u00b7 Posted: ' + job.posted_date : ''}${ev._fallback ? ' \u00b7 \u26a0\ufe0f Heuristic' : ''}`,\n  },\n  timestamp: new Date().toISOString(),\n};\n\nreturn [{ json: { ...$json, discordEmbed: embed } }];"
+      },
+      "id": "code-build-embed",
+      "name": "Build Discord Embed",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4208,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://discord.com/api/v10/channels/1481657700248191107/messages",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "discordBotApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ embeds: [$json.discordEmbed] }) }}",
+        "options": {}
+      },
+      "id": "http-discord-embed",
+      "name": "Send Job Embed",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4432,
+        304
+      ],
+      "credentials": {
+        "discordBotApi": {
+          "id": "ZDMFOE75AzwAAVO3",
+          "name": "Discord Bot account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Restore embed context and mark this job as successfully sent\nreturn [{ json: { ...$('Build Discord Embed').item.json, _wasSent: true } }];"
+      },
+      "id": "code-record-sent",
+      "name": "Record Job Sent",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4640,
+        304
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "merge-results",
+      "name": "Merge Results",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        4864,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const staticData = $getWorkflowStaticData('global');\nif (!staticData.seenJobIds) staticData.seenJobIds = [];\n\nconst allItems = $input.all();\nconst sent     = allItems.filter(i => i.json._wasSent === true).length;\nconst filtered = allItems.length - sent;\n\n// Mark ALL analyzed jobs as seen to prevent re-processing on next run\nfor (const item of allItems) {\n  const jobId = item.json.job?.id;\n  if (jobId && !staticData.seenJobIds.includes(jobId)) {\n    staticData.seenJobIds.push(jobId);\n  }\n}\n// Cap at 5000 to prevent unbounded growth (~100KB max)\nif (staticData.seenJobIds.length > 5000) {\n  staticData.seenJobIds = staticData.seenJobIds.slice(-5000);\n}\n\nreturn [{ json: { summarySent: sent, summaryFiltered: filtered, summaryTotal: allItems.length } }];"
+      },
+      "id": "code-summary",
+      "name": "Build Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5088,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "guildId": {
+          "mode": "id",
+          "value": "1204113877139198042"
+        },
+        "channelId": {
+          "mode": "id",
+          "value": "1481657700248191107"
+        },
+        "content": "={{ '\u2705 Done \u2014 **' + $json.summarySent + '** job' + ($json.summarySent === 1 ? '' : 's') + ' sent, **' + $json.summaryFiltered + '** filtered out (' + $json.summaryTotal + ' analyzed total)' }}",
+        "options": {}
+      },
+      "id": "discord-summary",
+      "name": "Send Summary",
+      "type": "n8n-nodes-base.discord",
+      "typeVersion": 2,
+      "position": [
+        5312,
+        464
+      ],
+      "webhookId": "5584b360-bdea-4d78-9ac0-a94d2866d80d",
+      "credentials": {
+        "discordBotApi": {
+          "id": "ZDMFOE75AzwAAVO3",
+          "name": "Discord Bot account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Poll Every Minute": {
+      "main": [
+        [
+          {
+            "node": "Fetch Discord Messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Discord Messages": {
+      "main": [
+        [
+          {
+            "node": "Filter New !jobs Messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter New !jobs Messages": {
+      "main": [
+        [
+          {
+            "node": "Skip Bot Messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Skip Bot Messages": {
+      "main": [
+        [
+          {
+            "node": "Parse Command",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Parse Command": {
+      "main": [
+        [
+          {
+            "node": "Extract Resume Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Resume Text": {
+      "main": [
+        [
+          {
+            "node": "Cache Resume Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cache Resume Text": {
+      "main": [
+        [
+          {
+            "node": "Run Scraper",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Scraper": {
+      "main": [
+        [
+          {
+            "node": "Parse Scraper Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Scraper Output": {
+      "main": [
+        [
+          {
+            "node": "Scraper Error?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Scraper Error?": {
+      "main": [
+        [
+          {
+            "node": "Send Scraper Error",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Deduplicate Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Deduplicate Jobs": {
+      "main": [
+        [
+          {
+            "node": "No New Jobs?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "No New Jobs?": {
+      "main": [
+        [
+          {
+            "node": "Send No New Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Acknowledgment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Acknowledgment": {
+      "main": [
+        [
+          {
+            "node": "Split Jobs Array",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Jobs Array": {
+      "main": [
+        [
+          {
+            "node": "Build Ollama Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Ollama Prompt": {
+      "main": [
+        [
+          {
+            "node": "Call Ollama",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Ollama": {
+      "main": [
+        [
+          {
+            "node": "Parse Ollama Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Ollama Response": {
+      "main": [
+        [
+          {
+            "node": "Score Filter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Score Filter": {
+      "main": [
+        [
+          {
+            "node": "Build Discord Embed",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Merge Results",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Build Discord Embed": {
+      "main": [
+        [
+          {
+            "node": "Send Job Embed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Job Embed": {
+      "main": [
+        [
+          {
+            "node": "Record Job Sent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Job Sent": {
+      "main": [
+        [
+          {
+            "node": "Merge Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Results": {
+      "main": [
+        [
+          {
+            "node": "Build Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Summary": {
+      "main": [
+        [
+          {
+            "node": "Send Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false,
+    "errorWorkflow": "RkD096H7kDZmEGcP"
+  },
+  "staticData": {
+    "node:Poll Every Minute": {
+      "recurrenceRules": []
+    },
+    "global": {
+      "jobLastMsgId": "1487488268407673034"
+    }
+  },
+  "meta": null,
+  "pinData": {},
+  "versionId": "d396bcd6-474d-4a6e-aa39-1a4ce9f17640",
+  "activeVersionId": "d396bcd6-474d-4a6e-aa39-1a4ce9f17640",
+  "versionCounter": 310,
+  "triggerCount": 1,
+  "shared": [
+    {
+      "updatedAt": "2026-03-18T03:33:13.798Z",
+      "createdAt": "2026-03-18T03:33:13.798Z",
+      "role": "workflow:owner",
+      "workflowId": "PjGsqBwbj30YlMoM",
+      "projectId": "2wMuHrOZ0KpAorzn",
+      "project": {
+        "updatedAt": "2026-03-15T01:06:51.004Z",
+        "createdAt": "2026-03-15T01:05:30.851Z",
+        "id": "2wMuHrOZ0KpAorzn",
+        "name": "monday bot <a3171998@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "dc157584-5741-4a40-a086-70a91678825f"
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": {
+    "updatedAt": "2026-04-02T00:41:09.751Z",
+    "createdAt": "2026-04-02T00:41:09.751Z",
+    "versionId": "d396bcd6-474d-4a6e-aa39-1a4ce9f17640",
+    "workflowId": "PjGsqBwbj30YlMoM",
+    "nodes": [
+      {
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "minutes",
+                "minutesInterval": 5
+              }
+            ]
+          }
+        },
+        "id": "sched-poll",
+        "name": "Poll Every Minute",
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.2,
+        "position": [
+          240,
+          464
+        ]
+      },
+      {
+        "parameters": {
+          "resource": "message",
+          "operation": "getAll",
+          "guildId": {
+            "mode": "id",
+            "value": "1204113877139198042"
+          },
+          "channelId": {
+            "mode": "id",
+            "value": "1481657700248191107"
+          },
+          "limit": 10,
+          "options": {}
+        },
+        "id": "discord-get-msgs",
+        "name": "Fetch Discord Messages",
+        "type": "n8n-nodes-base.discord",
+        "typeVersion": 2,
+        "position": [
+          464,
+          464
+        ],
+        "webhookId": "fe959cdc-5aed-460b-b9cb-c0372cf2385d",
+        "credentials": {
+          "discordBotApi": {
+            "id": "ZDMFOE75AzwAAVO3",
+            "name": "Discord Bot account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "const staticData = $getWorkflowStaticData('global');\nif (!staticData.jobLastMsgId) staticData.jobLastMsgId = '0';\n\nconst messages = $input.all().map(i => i.json);\nconst newMsgs = messages.filter(m => m.id && BigInt(m.id) > BigInt(staticData.jobLastMsgId));\n\nif (newMsgs.length === 0) return [];\n\nconst newestId = newMsgs.reduce(\n  (max, m) => BigInt(m.id) > BigInt(max) ? m.id : max,\n  staticData.jobLastMsgId\n);\nstaticData.jobLastMsgId = newestId;\n\nreturn newMsgs\n  .reverse()\n  .filter(m => m.content && m.content.trim().startsWith('!jobs'))\n  .map(m => ({ json: m }));"
+        },
+        "id": "code-filter-jobs",
+        "name": "Filter New !jobs Messages",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          688,
+          464
+        ]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 1
+            },
+            "conditions": [
+              {
+                "id": "bot-check",
+                "leftValue": "={{ $json.author?.bot }}",
+                "rightValue": true,
+                "operator": {
+                  "type": "boolean",
+                  "operation": "notEquals"
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "id": "if-bot",
+        "name": "Skip Bot Messages",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2,
+        "position": [
+          912,
+          464
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "const content  = $json.content  || '';\nconst authorId = $json.author?.id || 'unknown';\n\n// \u2500\u2500\u2500 Defaults: edit these to change your preferences \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\nconst DEFAULT_TITLES     = ['Data Scientist', 'ML Engineer', 'AI Engineer', 'Data Analyst'];\nconst DEFAULT_LIMIT      = 25;\nconst DEFAULT_SITES      = 'linkedin';\nconst RESUME_PATH        = '/home/ubuntu/resume.pdf';\nconst SCRAPER_PATH       = '/home/ubuntu/job-scraper/scraper.py';\nconst OLLAMA_MODEL       = 'llama3.2:latest';\nconst OLLAMA_URL         = 'http://localhost:11434/api/chat';\nconst SKILLS_MATCH_MIN   = 40;\nconst INTENT_MIN         = 6;\n// \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n\nconst params = {\n  authorId,\n  titles:          [...DEFAULT_TITLES],\n  remote:          true,\n  hybrid:          true,\n  onsite:          false,\n  city:            '',\n  limit:           DEFAULT_LIMIT,\n  sites:           DEFAULT_SITES,\n  resumePath:      RESUME_PATH,\n  scraperPath:     SCRAPER_PATH,\n  ollamaModel:     OLLAMA_MODEL,\n  ollamaUrl:       OLLAMA_URL,\n  skillsMatchMin:  SKILLS_MATCH_MIN,\n  intentToHireMin: INTENT_MIN,\n  adzunaAppId:     '',\n  adzunaApiKey:    '',\n};\n\nconst args = content.slice('!jobs'.length).trim();\nlet remainder = args;\n\n// Extract quoted title: !jobs \"Senior Data Scientist\" --remote\nconst quotedMatch = args.match(/^\"([^\"]+)\"/);\nif (quotedMatch) {\n  params.titles = [quotedMatch[1]];\n  remainder = args.slice(quotedMatch[0].length).trim();\n} else {\n  const firstFlagIdx = remainder.indexOf('--');\n  if (firstFlagIdx > 0) {\n    const possibleTitle = remainder.slice(0, firstFlagIdx).trim();\n    if (possibleTitle) { params.titles = [possibleTitle]; remainder = remainder.slice(firstFlagIdx); }\n  } else if (remainder.length > 0 && !remainder.startsWith('--')) {\n    params.titles = [remainder];\n    remainder = '';\n  }\n}\n\n// Parse --flag and --flag=value pairs\nconst flagMatches = remainder.match(/--[\\w-]+(?:=[^\\s]+)?/g) || [];\nfor (const flag of flagMatches) {\n  const eqIdx = flag.indexOf('=');\n  const key   = eqIdx >= 0 ? flag.slice(2, eqIdx) : flag.slice(2);\n  const val   = eqIdx >= 0 ? flag.slice(eqIdx + 1) : '';\n  switch (key) {\n    case 'remote':    params.remote = true;  break;\n    case 'hybrid':    params.hybrid = true;  break;\n    case 'onsite':    params.onsite = true;  break;\n    case 'no-remote': params.remote = false; break;\n    case 'no-hybrid': params.hybrid = false; break;\n    case 'city':      params.city   = val;   break;\n    case 'limit':     params.limit  = Math.min(50, parseInt(val) || DEFAULT_LIMIT); break;\n    case 'sites':     params.sites  = val;   break;\n  }\n}\n\nconst titleArg = params.titles.join(' OR ');\nlet cliArgs = `--title \"${titleArg}\" --sites \"${params.sites}\" --limit ${params.limit}`;\nif (params.remote) cliArgs += ' --remote';\nif (params.hybrid) cliArgs += ' --hybrid';\nif (params.onsite) cliArgs += ' --onsite';\nif (params.city)   cliArgs += ` --city \"${params.city}\"`;\nif (params.adzunaAppId)  cliArgs += ` --adzuna-app-id \"${params.adzunaAppId}\"`;\nif (params.adzunaApiKey) cliArgs += ` --adzuna-api-key \"${params.adzunaApiKey}\"`;\nparams.scraperCliArgs = cliArgs;\n\nreturn [{ json: params }];"
+        },
+        "id": "code-parse-cmd",
+        "name": "Parse Command",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1120,
+          464
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "http://localhost:3457/extract-pdf",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ path: $json.resumePath }) }}",
+          "options": {}
+        },
+        "id": "http-extract-pdf",
+        "name": "Extract Resume Text",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1344,
+          464
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "const staticData = $getWorkflowStaticData('global');\nconst params     = $('Parse Command').first().json;\nconst stdout     = $json.text || '';\n\nif (!stdout || stdout.trim().length < 50) {\n  if (staticData.cachedResumeText) {\n    return [{ json: { ...params, resumeText: staticData.cachedResumeText, resumeFromCache: true } }];\n  }\n  return [{ json: { ...params, resumeText: '(resume unavailable \u2014 check /home/ubuntu/resume.pdf)', resumeError: true } }];\n}\n\nconst resumeText = stdout.trim().slice(0, 4000);\nstaticData.cachedResumeText = resumeText;\n\nreturn [{ json: { ...params, resumeText } }];"
+        },
+        "id": "code-cache-resume",
+        "name": "Cache Resume Text",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1568,
+          464
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "http://localhost:3457/scrape",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({\n  title:        $json.titles ? $json.titles.join(' OR ') : 'Data Scientist',\n  sites:        $json.sites,\n  limit:        $json.limit,\n  remote:       $json.remote,\n  hybrid:       $json.hybrid,\n  onsite:       $json.onsite,\n  city:         $json.city || '',\n  adzunaAppId:  $json.adzunaAppId  || '',\n  adzunaApiKey: $json.adzunaApiKey || ''\n}) }}",
+          "options": {
+            "timeout": 370000
+          }
+        },
+        "id": "http-run-scraper",
+        "name": "Run Scraper",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1792,
+          464
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "const params   = $('Cache Resume Text').first().json;\nconst response = $json;   // { jobs, count, error } from job-scraper service\n\nif (response.error) {\n  return [{ json: { ...params, scraperError: true, scraperErrorMsg: String(response.error).slice(0, 500), jobs: [] } }];\n}\n\nconst jobs = response.jobs || [];\nif (!Array.isArray(jobs)) {\n  return [{ json: { ...params, scraperError: true, scraperErrorMsg: 'Service returned non-array jobs', jobs: [] } }];\n}\n\nreturn [{ json: { ...params, scraperError: false, jobs, totalFound: jobs.length } }];"
+        },
+        "id": "code-parse-scraper",
+        "name": "Parse Scraper Output",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          2000,
+          464
+        ]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "conditions": [
+              {
+                "id": "scraper-err-check",
+                "leftValue": "={{ $json.scraperError }}",
+                "rightValue": true,
+                "operator": {
+                  "type": "boolean",
+                  "operation": "equals"
+                }
+              }
+            ]
+          },
+          "options": {}
+        },
+        "id": "if-scraper-error",
+        "name": "Scraper Error?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2,
+        "position": [
+          2224,
+          464
+        ]
+      },
+      {
+        "parameters": {
+          "resource": "message",
+          "guildId": {
+            "mode": "id",
+            "value": "1204113877139198042"
+          },
+          "channelId": {
+            "mode": "id",
+            "value": "1481657700248191107"
+          },
+          "content": "={{ '\u274c Job scraper failed: ' + ($json.scraperErrorMsg || 'unknown error') }}",
+          "options": {}
+        },
+        "id": "discord-send-err",
+        "name": "Send Scraper Error",
+        "type": "n8n-nodes-base.discord",
+        "typeVersion": 2,
+        "position": [
+          2448,
+          240
+        ],
+        "webhookId": "17ee3be8-1082-427f-84ed-e96c0a26e46f",
+        "credentials": {
+          "discordBotApi": {
+            "id": "ZDMFOE75AzwAAVO3",
+            "name": "Discord Bot account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "const staticData = $getWorkflowStaticData('global');\nif (!staticData.seenJobIds) staticData.seenJobIds = [];\n\nconst jobs   = $json.jobs || [];\nconst params = { ...$json };\ndelete params.jobs;\n\nconst newJobs = jobs.filter(job => !staticData.seenJobIds.includes(job.id));\n\nif (newJobs.length === 0) {\n  return [{ json: { ...params, noNewJobs: true, newJobs: [], newCount: 0 } }];\n}\n\nreturn [{ json: { ...params, noNewJobs: false, newJobs, newCount: newJobs.length } }];"
+        },
+        "id": "code-dedup",
+        "name": "Deduplicate Jobs",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          2448,
+          464
+        ]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "conditions": [
+              {
+                "id": "no-new-check",
+                "leftValue": "={{ $json.noNewJobs }}",
+                "rightValue": true,
+                "operator": {
+                  "type": "boolean",
+                  "operation": "equals"
+                }
+              }
+            ]
+          },
+          "options": {}
+        },
+        "id": "if-no-new",
+        "name": "No New Jobs?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2,
+        "position": [
+          2672,
+          464
+        ]
+      },
+      {
+        "parameters": {
+          "resource": "message",
+          "guildId": {
+            "mode": "id",
+            "value": "1204113877139198042"
+          },
+          "channelId": {
+            "mode": "id",
+            "value": "1481657700248191107"
+          },
+          "content": "={{ '\u2728 No new listings since last run (' + $json.totalFound + ' jobs found, all previously seen)' }}",
+          "options": {}
+        },
+        "id": "discord-no-new",
+        "name": "Send No New Jobs",
+        "type": "n8n-nodes-base.discord",
+        "typeVersion": 2,
+        "position": [
+          2880,
+          272
+        ],
+        "webhookId": "4f8cf02c-9f89-439b-a0be-5ea5c978280e",
+        "credentials": {
+          "discordBotApi": {
+            "id": "ZDMFOE75AzwAAVO3",
+            "name": "Discord Bot account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "resource": "message",
+          "guildId": {
+            "mode": "id",
+            "value": "1204113877139198042"
+          },
+          "channelId": {
+            "mode": "id",
+            "value": "1481657700248191107"
+          },
+          "content": "={{ '\ud83d\udd0d Found **' + $json.newCount + '** new job' + ($json.newCount === 1 ? '' : 's') + ' to analyze with AI...' }}",
+          "options": {}
+        },
+        "id": "discord-ack",
+        "name": "Send Acknowledgment",
+        "type": "n8n-nodes-base.discord",
+        "typeVersion": 2,
+        "position": [
+          2880,
+          464
+        ],
+        "webhookId": "e8d91119-e79d-419e-8408-af2ade6b1ff1",
+        "credentials": {
+          "discordBotApi": {
+            "id": "ZDMFOE75AzwAAVO3",
+            "name": "Discord Bot account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "const data = $('Deduplicate Jobs').first().json;\nconst { newJobs = [], resumeText, ollamaModel, ollamaUrl, skillsMatchMin, intentToHireMin } = data;\n\nif (newJobs.length === 0) return [];\n\nreturn newJobs.map(job => ({\n  json: { resumeText, ollamaModel, ollamaUrl, skillsMatchMin, intentToHireMin, job }\n}));"
+        },
+        "id": "code-split-jobs",
+        "name": "Split Jobs Array",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          3104,
+          464
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "const { resumeText, job } = $json;\n\nconst prompt = `You are a job application evaluator. Analyze this job posting against the candidate's resume and return ONLY valid JSON \u2014 no explanation, no markdown.\n\nRESUME:\n${resumeText}\n\nJOB POSTING:\nTitle: ${job.title}\nCompany: ${job.company}\nLocation: ${job.location} (${job.remote_type})\nSalary: ${job.salary || 'Not specified'}\nDescription: ${job.description}\n\nReturn this exact JSON structure:\n{\n  \"intent_to_hire_score\": <integer 1-10, 10 = clearly targeting this exact profile>,\n  \"skills_match_percent\": <integer 0-100, only required/strongly-preferred skills>,\n  \"salary_fit\": <\"good\" | \"below_expectations\" | \"above_expectations\" | \"unknown\">,\n  \"red_flags\": [<up to 3 strings, empty array if none>],\n  \"strengths\": [<2-3 specific resume-to-job matches>],\n  \"summary\": \"<2-3 sentence honest assessment of fit>\"\n}\n\nScoring guidance:\n- intent_to_hire_score: Deduct for vague JD, missing company name, unrealistic requirements. Add for specific team info, clear requirements, salary listed.\n- red_flags: Vague role, required degree not on resume, key tools not on resume, suspiciously generic JD, possible ghost job.`;\n\nreturn [{ json: { ...$json, ollamaPrompt: prompt } }];"
+        },
+        "id": "code-build-prompt",
+        "name": "Build Ollama Prompt",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          3328,
+          464
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "={{ $json.ollamaUrl }}",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ model: $json.ollamaModel, messages: [{ role: \"user\", content: $json.ollamaPrompt }], stream: false, format: \"json\" }) }}",
+          "options": {
+            "timeout": 120000
+          }
+        },
+        "id": "http-ollama",
+        "name": "Call Ollama",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          3552,
+          464
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "const rawContent = $json.message?.content || $json.choices?.[0]?.message?.content || '';\n\nlet ev;\ntry {\n  ev = typeof rawContent === 'string' ? JSON.parse(rawContent) : rawContent;\n} catch (e) {\n  ev = {\n    intent_to_hire_score: 5,\n    skills_match_percent: 50,\n    salary_fit:   'unknown',\n    red_flags:    [],\n    strengths:    ['(AI parse failed \u2014 heuristic fallback)'],\n    summary:      'Ollama response could not be parsed. Flagged for manual review.',\n    _fallback:    true,\n  };\n}\n\nconst validFits = ['good', 'below_expectations', 'above_expectations', 'unknown'];\nconst evaluation = {\n  intent_to_hire_score: Math.min(10, Math.max(1, parseInt(ev.intent_to_hire_score) || 5)),\n  skills_match_percent: Math.min(100, Math.max(0, parseInt(ev.skills_match_percent) || 50)),\n  salary_fit:           validFits.includes(ev.salary_fit) ? ev.salary_fit : 'unknown',\n  red_flags:            Array.isArray(ev.red_flags) ? ev.red_flags.slice(0, 3) : [],\n  strengths:            Array.isArray(ev.strengths) ? ev.strengths.slice(0, 3) : [],\n  summary:              String(ev.summary || '').slice(0, 600),\n  _fallback:            ev._fallback || false,\n};\n\nconst { ollamaPrompt, ...rest } = $json;\nreturn [{ json: { ...rest, evaluation } }];"
+        },
+        "id": "code-parse-ollama",
+        "name": "Parse Ollama Response",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          3760,
+          464
+        ]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "combineOperation": "all",
+            "conditions": [
+              {
+                "id": "intent-check",
+                "leftValue": "={{ $json.evaluation.intent_to_hire_score }}",
+                "rightValue": "={{ $json.intentToHireMin }}",
+                "operator": {
+                  "type": "number",
+                  "operation": "gte"
+                }
+              },
+              {
+                "id": "skills-check",
+                "leftValue": "={{ $json.evaluation.skills_match_percent }}",
+                "rightValue": "={{ $json.skillsMatchMin }}",
+                "operator": {
+                  "type": "number",
+                  "operation": "gte"
+                }
+              }
+            ]
+          },
+          "options": {}
+        },
+        "id": "if-score",
+        "name": "Score Filter",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2,
+        "position": [
+          3984,
+          464
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "const { job, evaluation: ev } = $json;\nconst skills = ev.skills_match_percent;\n\nconst color = skills >= 70 ? 0x57F287 : skills >= 40 ? 0xFEE75C : 0xE67E22;\n\nconst salaryEmoji = { good: '\u2705', below_expectations: '\u2b07\ufe0f', above_expectations: '\u2b06\ufe0f', unknown: '\u2753' }[ev.salary_fit] || '\u2753';\nconst remoteEmoji = { remote: '\ud83c\udfe0', hybrid: '\ud83d\udd00', onsite: '\ud83c\udfe2', unknown: '\ud83d\udccd' }[job.remote_type] || '\ud83d\udccd';\nconst sourceLabel = { linkedin: 'LinkedIn', indeed: 'Indeed', adzuna: 'Adzuna' }[job.source] || job.source;\n\nconst embed = {\n  title: `${job.title} @ ${job.company}`.slice(0, 256),\n  url:   job.url,\n  color,\n  fields: [\n    { name: '\ud83d\udccd Location',    value: `${job.location || 'Not specified'} ${remoteEmoji} \\`${job.remote_type}\\``,               inline: true  },\n    { name: '\ud83d\udcb0 Salary',      value: `${salaryEmoji} ${job.salary || 'Not listed'} *(${ev.salary_fit})*`,                      inline: true  },\n    { name: '\ud83c\udfaf Skills Match',value: `**${skills}%**`,                                                                          inline: true  },\n    { name: '\ud83e\udd1d Hiring Intent',value: `**${ev.intent_to_hire_score}/10**`,                                                     inline: true  },\n    { name: '\u2728 Strengths',   value: ev.strengths.length > 0 ? ev.strengths.map(s => `\u2022 ${s}`).join('\\n') : '*None identified*', inline: false },\n    { name: '\u26a0\ufe0f Red Flags',   value: ev.red_flags.length  > 0 ? ev.red_flags.map(f => `\u2022 ${f}`).join('\\n')  : '*None detected*',  inline: false },\n    { name: '\ud83e\udd16 AI Assessment',value: ev.summary || '*No summary available*',                                                  inline: false },\n  ],\n  footer: {\n    text: `${sourceLabel}${job.posted_date ? ' \u00b7 Posted: ' + job.posted_date : ''}${ev._fallback ? ' \u00b7 \u26a0\ufe0f Heuristic' : ''}`,\n  },\n  timestamp: new Date().toISOString(),\n};\n\nreturn [{ json: { ...$json, discordEmbed: embed } }];"
+        },
+        "id": "code-build-embed",
+        "name": "Build Discord Embed",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          4208,
+          304
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://discord.com/api/v10/channels/1481657700248191107/messages",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "discordBotApi",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ embeds: [$json.discordEmbed] }) }}",
+          "options": {}
+        },
+        "id": "http-discord-embed",
+        "name": "Send Job Embed",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          4432,
+          304
+        ],
+        "credentials": {
+          "discordBotApi": {
+            "id": "ZDMFOE75AzwAAVO3",
+            "name": "Discord Bot account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "// Restore embed context and mark this job as successfully sent\nreturn [{ json: { ...$('Build Discord Embed').item.json, _wasSent: true } }];"
+        },
+        "id": "code-record-sent",
+        "name": "Record Job Sent",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          4640,
+          304
+        ]
+      },
+      {
+        "parameters": {},
+        "id": "merge-results",
+        "name": "Merge Results",
+        "type": "n8n-nodes-base.merge",
+        "typeVersion": 3,
+        "position": [
+          4864,
+          464
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "const staticData = $getWorkflowStaticData('global');\nif (!staticData.seenJobIds) staticData.seenJobIds = [];\n\nconst allItems = $input.all();\nconst sent     = allItems.filter(i => i.json._wasSent === true).length;\nconst filtered = allItems.length - sent;\n\n// Mark ALL analyzed jobs as seen to prevent re-processing on next run\nfor (const item of allItems) {\n  const jobId = item.json.job?.id;\n  if (jobId && !staticData.seenJobIds.includes(jobId)) {\n    staticData.seenJobIds.push(jobId);\n  }\n}\n// Cap at 5000 to prevent unbounded growth (~100KB max)\nif (staticData.seenJobIds.length > 5000) {\n  staticData.seenJobIds = staticData.seenJobIds.slice(-5000);\n}\n\nreturn [{ json: { summarySent: sent, summaryFiltered: filtered, summaryTotal: allItems.length } }];"
+        },
+        "id": "code-summary",
+        "name": "Build Summary",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          5088,
+          464
+        ]
+      },
+      {
+        "parameters": {
+          "resource": "message",
+          "guildId": {
+            "mode": "id",
+            "value": "1204113877139198042"
+          },
+          "channelId": {
+            "mode": "id",
+            "value": "1481657700248191107"
+          },
+          "content": "={{ '\u2705 Done \u2014 **' + $json.summarySent + '** job' + ($json.summarySent === 1 ? '' : 's') + ' sent, **' + $json.summaryFiltered + '** filtered out (' + $json.summaryTotal + ' analyzed total)' }}",
+          "options": {}
+        },
+        "id": "discord-summary",
+        "name": "Send Summary",
+        "type": "n8n-nodes-base.discord",
+        "typeVersion": 2,
+        "position": [
+          5312,
+          464
+        ],
+        "webhookId": "5584b360-bdea-4d78-9ac0-a94d2866d80d",
+        "credentials": {
+          "discordBotApi": {
+            "id": "ZDMFOE75AzwAAVO3",
+            "name": "Discord Bot account"
+          }
+        }
+      }
+    ],
+    "connections": {
+      "Poll Every Minute": {
+        "main": [
+          [
+            {
+              "node": "Fetch Discord Messages",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Fetch Discord Messages": {
+        "main": [
+          [
+            {
+              "node": "Filter New !jobs Messages",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Filter New !jobs Messages": {
+        "main": [
+          [
+            {
+              "node": "Skip Bot Messages",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Skip Bot Messages": {
+        "main": [
+          [
+            {
+              "node": "Parse Command",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          []
+        ]
+      },
+      "Parse Command": {
+        "main": [
+          [
+            {
+              "node": "Extract Resume Text",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Extract Resume Text": {
+        "main": [
+          [
+            {
+              "node": "Cache Resume Text",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Cache Resume Text": {
+        "main": [
+          [
+            {
+              "node": "Run Scraper",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Run Scraper": {
+        "main": [
+          [
+            {
+              "node": "Parse Scraper Output",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Parse Scraper Output": {
+        "main": [
+          [
+            {
+              "node": "Scraper Error?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Scraper Error?": {
+        "main": [
+          [
+            {
+              "node": "Send Scraper Error",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Deduplicate Jobs",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Deduplicate Jobs": {
+        "main": [
+          [
+            {
+              "node": "No New Jobs?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "No New Jobs?": {
+        "main": [
+          [
+            {
+              "node": "Send No New Jobs",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Send Acknowledgment",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Send Acknowledgment": {
+        "main": [
+          [
+            {
+              "node": "Split Jobs Array",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Split Jobs Array": {
+        "main": [
+          [
+            {
+              "node": "Build Ollama Prompt",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Build Ollama Prompt": {
+        "main": [
+          [
+            {
+              "node": "Call Ollama",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Call Ollama": {
+        "main": [
+          [
+            {
+              "node": "Parse Ollama Response",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Parse Ollama Response": {
+        "main": [
+          [
+            {
+              "node": "Score Filter",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Score Filter": {
+        "main": [
+          [
+            {
+              "node": "Build Discord Embed",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Merge Results",
+              "type": "main",
+              "index": 1
+            }
+          ]
+        ]
+      },
+      "Build Discord Embed": {
+        "main": [
+          [
+            {
+              "node": "Send Job Embed",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Send Job Embed": {
+        "main": [
+          [
+            {
+              "node": "Record Job Sent",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Record Job Sent": {
+        "main": [
+          [
+            {
+              "node": "Merge Results",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Merge Results": {
+        "main": [
+          [
+            {
+              "node": "Build Summary",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Build Summary": {
+        "main": [
+          [
+            {
+              "node": "Send Summary",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "authors": "monday bot",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2026-04-02T00:41:09.827Z",
+        "id": 171,
+        "workflowId": "PjGsqBwbj30YlMoM",
+        "versionId": "d396bcd6-474d-4a6e-aa39-1a4ce9f17640",
+        "event": "activated",
+        "userId": "dc157584-5741-4a40-a086-70a91678825f"
+      },
+      {
+        "createdAt": "2026-04-02T00:42:13.040Z",
+        "id": 178,
+        "workflowId": "PjGsqBwbj30YlMoM",
+        "versionId": "d396bcd6-474d-4a6e-aa39-1a4ce9f17640",
+        "event": "activated",
+        "userId": "dc157584-5741-4a40-a086-70a91678825f"
+      },
+      {
+        "createdAt": "2026-04-02T00:41:09.805Z",
+        "id": 170,
+        "workflowId": "PjGsqBwbj30YlMoM",
+        "versionId": "d396bcd6-474d-4a6e-aa39-1a4ce9f17640",
+        "event": "deactivated",
+        "userId": "dc157584-5741-4a40-a086-70a91678825f"
+      },
+      {
+        "createdAt": "2026-04-02T00:42:13.022Z",
+        "id": 177,
+        "workflowId": "PjGsqBwbj30YlMoM",
+        "versionId": "d396bcd6-474d-4a6e-aa39-1a4ce9f17640",
+        "event": "deactivated",
+        "userId": "dc157584-5741-4a40-a086-70a91678825f"
+      }
+    ]
+  }
+}
